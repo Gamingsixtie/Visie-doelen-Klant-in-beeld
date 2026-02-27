@@ -1,0 +1,184 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Cito Brand Colors als CSS Variables */
+:root {
+  --cito-blue: #003366;
+  --cito-light-blue: #E6F0FA;
+  --cito-green: #2E7D32;
+  --cito-light-green: #E8F5E9;
+  --cito-orange: #E65100;
+  --cito-light-orange: #FFF3E0;
+  --cito-purple: #7B1FA2;
+  --cito-light-purple: #F3E5F5;
+  --gray-100: #F5F5F5;
+  --gray-600: #666666;
+
+  /* Consensus kleuren */
+  --consensus-high: #C8E6C9;
+  --consensus-medium: #FFCC80;
+  --consensus-low: #EF9A9A;
+
+  /* Gold voor celebration */
+  --gold: #FFD700;
+}
+
+/* Base styling */
+body {
+  @apply bg-gray-50 text-gray-900;
+  font-family: system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-gray-100;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-gray-300 rounded;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-gray-400;
+}
+
+/* Celebration overlay styling */
+.celebration-overlay {
+  position: fixed;
+  inset: 0;
+  background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 100%);
+  z-index: 9999;
+}
+
+.title-text-glow {
+  text-shadow:
+    0 0 20px rgba(255, 215, 0, 0.8),
+    0 0 40px rgba(255, 215, 0, 0.6),
+    0 0 60px rgba(255, 215, 0, 0.4);
+}
+
+.achievement-card {
+  background: linear-gradient(135deg, #1e3a5f 0%, #0d2137 100%);
+  border: 2px solid #FFD700;
+}
+
+/* Flow step indicators */
+.step-indicator {
+  @apply flex items-center justify-center w-8 h-8 rounded-full text-sm font-medium transition-all;
+}
+
+.step-indicator.locked {
+  @apply bg-gray-200 text-gray-400;
+}
+
+.step-indicator.active {
+  @apply bg-cito-blue text-white ring-4 ring-cito-light-blue;
+}
+
+.step-indicator.completed {
+  @apply bg-cito-green text-white;
+}
+
+/* Card styling */
+.card {
+  @apply bg-white rounded-lg shadow-sm border border-gray-200 p-4;
+}
+
+.card-hover {
+  @apply hover:shadow-md hover:border-gray-300 transition-all cursor-pointer;
+}
+
+/* Button variants */
+.btn {
+  @apply px-4 py-2 rounded-lg font-medium transition-all focus:outline-none focus:ring-2 focus:ring-offset-2;
+}
+
+.btn-primary {
+  @apply bg-cito-blue text-white hover:bg-blue-800 focus:ring-cito-blue;
+}
+
+.btn-secondary {
+  @apply bg-gray-100 text-gray-700 hover:bg-gray-200 focus:ring-gray-500;
+}
+
+.btn-success {
+  @apply bg-cito-green text-white hover:bg-green-700 focus:ring-cito-green;
+}
+
+.btn-danger {
+  @apply bg-red-600 text-white hover:bg-red-700 focus:ring-red-500;
+}
+
+/* Vote buttons */
+.vote-btn {
+  @apply px-6 py-3 rounded-lg font-medium border-2 transition-all;
+}
+
+.vote-btn-agree {
+  @apply border-green-500 text-green-700 hover:bg-green-50;
+}
+
+.vote-btn-agree.selected {
+  @apply bg-green-500 text-white;
+}
+
+.vote-btn-disagree {
+  @apply border-red-500 text-red-700 hover:bg-red-50;
+}
+
+.vote-btn-disagree.selected {
+  @apply bg-red-500 text-white;
+}
+
+.vote-btn-abstain {
+  @apply border-gray-400 text-gray-600 hover:bg-gray-50;
+}
+
+.vote-btn-abstain.selected {
+  @apply bg-gray-400 text-white;
+}
+
+/* Consensus badges */
+.consensus-badge {
+  @apply inline-flex items-center px-2 py-1 rounded-full text-xs font-medium;
+}
+
+.consensus-badge.high {
+  @apply bg-green-100 text-green-800;
+}
+
+.consensus-badge.medium {
+  @apply bg-orange-100 text-orange-800;
+}
+
+.consensus-badge.low {
+  @apply bg-red-100 text-red-800;
+}
+
+/* Matrix cell highlighting */
+.matrix-cell {
+  @apply p-3 border-b border-r border-gray-200;
+}
+
+.matrix-cell.consensus {
+  @apply bg-consensus-high;
+}
+
+.matrix-cell.unique {
+  @apply bg-consensus-medium;
+}
+
+.matrix-cell.tension {
+  @apply bg-consensus-low;
+}
+
+/* Loading spinner */
+.spinner {
+  @apply animate-spin h-5 w-5 border-2 border-cito-blue border-t-transparent rounded-full;
+}
