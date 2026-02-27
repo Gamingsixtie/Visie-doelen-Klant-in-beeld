@@ -1,5 +1,6 @@
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  turbopack: {},
   // Configuratie voor mammoth.js (server-side only)
   webpack: (config, { isServer }) => {
     if (!isServer) {
