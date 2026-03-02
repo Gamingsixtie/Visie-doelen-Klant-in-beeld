@@ -38,6 +38,8 @@ export type QuestionType =
   | "goal_1"                 // Doel 1
   | "goal_2"                 // Doel 2
   | "goal_3"                 // Doel 3
+  | "goal_4"                 // Doel 4
+  | "goal_5"                 // Doel 5
   | "out_of_scope";          // Buiten scope
 
 export type QuestionCategory = "visie" | "doelen" | "scope";
@@ -50,6 +52,8 @@ export const QUESTION_LABELS: Record<QuestionType, string> = {
   goal_1: "Doel 1 (hoogste prioriteit)",
   goal_2: "Doel 2",
   goal_3: "Doel 3",
+  goal_4: "Doel 4",
+  goal_5: "Doel 5",
   out_of_scope: "Buiten scope"
 };
 
@@ -61,6 +65,8 @@ export const QUESTION_CATEGORIES: Record<QuestionType, QuestionCategory> = {
   goal_1: "doelen",
   goal_2: "doelen",
   goal_3: "doelen",
+  goal_4: "doelen",
+  goal_5: "doelen",
   out_of_scope: "scope"
 };
 
@@ -158,6 +164,7 @@ export type FlowStep =
   | "visie_gewenste"
   | "visie_beweging"
   | "visie_stakeholders"
+  | "visie_samenvatting"
   | "doelen"
   | "scope"
   | "export";
@@ -194,6 +201,7 @@ export const FLOW_ORDER: FlowStep[] = [
   "visie_gewenste",
   "visie_beweging",
   "visie_stakeholders",
+  "visie_samenvatting",
   "doelen",
   "scope",
   "export"
@@ -205,6 +213,7 @@ export const FLOW_STEP_LABELS: Record<FlowStep, string> = {
   visie_gewenste: "Gewenste situatie",
   visie_beweging: "Beweging",
   visie_stakeholders: "Belanghebbenden",
+  visie_samenvatting: "Visie Samenvatting",
   doelen: "Doelen",
   scope: "Scope",
   export: "Export"
@@ -372,6 +381,7 @@ export function getInitialFlowState(): FlowState {
       visie_gewenste: "locked",
       visie_beweging: "locked",
       visie_stakeholders: "locked",
+      visie_samenvatting: "locked",
       doelen: "locked",
       scope: "locked",
       export: "locked"

@@ -26,6 +26,7 @@ interface SessionContextType {
   createNewSession: (name: string) => StoredSession;
   loadSession: (sessionId: string) => void;
   closeSession: () => void;
+  completeSession: () => void;
 
   // Document management
   addDocument: (doc: Omit<StoredDocument, "id" | "sessionId">) => StoredDocument;
@@ -110,6 +111,14 @@ export function SessionProvider({ children }: SessionProviderProps) {
     setDocuments([]);
     setApprovedTexts([]);
   }, []);
+
+  const completeSession = useCallback(() => {
+    if (!currentSession) return;
+
+    persistence.updateSession(currentSession.id, { status: "completed" });
+    setCurrentSession((prev) => prev ? { ...prev, status: "completed" } : null);
+    refreshSessions();
+  }, [currentSession, refreshSessions]);
 
   // Document management
   const addDocument = useCallback((doc: Omit<StoredDocument, "id" | "sessionId">): StoredDocument => {
@@ -232,6 +241,7 @@ export function SessionProvider({ children }: SessionProviderProps) {
     createNewSession,
     loadSession,
     closeSession,
+    completeSession,
     addDocument,
     removeDocument,
     updateDocumentResponse,

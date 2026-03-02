@@ -6,10 +6,12 @@ import { isSessionComplete } from "@/lib/types";
 import { FinalCelebration, triggerConfetti } from "@/components/celebration";
 
 export function ExportStep() {
-  const { flowState, getApprovedText, currentSession, documents } = useSession();
+  const { flowState, getApprovedText, currentSession, documents, completeSession, closeSession } = useSession();
   const [isGenerating, setIsGenerating] = useState(false);
   const [showCelebration, setShowCelebration] = useState(false);
   const [downloadComplete, setDownloadComplete] = useState(false);
+  const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
+  const [sessionFinished, setSessionFinished] = useState(false);
 
   const visieHuidige = getApprovedText("current_situation");
   const visieGewenste = getApprovedText("desired_situation");
@@ -129,6 +131,24 @@ export function ExportStep() {
   const handleCloseCelebration = () => {
     setShowCelebration(false);
     setDownloadComplete(true);
+  };
+
+  const handleCompleteSession = () => {
+    completeSession();
+    setSessionFinished(true);
+    setShowCompleteConfirm(false);
+
+    // Trigger confetti for final completion
+    triggerConfetti({
+      particleCount: 200,
+      spread: 100
+    });
+  };
+
+  const handleStartNewSession = () => {
+    closeSession();
+    // This will trigger a redirect to the home page through the app's routing
+    window.location.href = "/";
   };
 
   // Calculate completion percentage
@@ -434,6 +454,69 @@ export function ExportStep() {
                 Document gedownload!
               </p>
             )}
+
+            {/* Session complete button */}
+            {isComplete && !sessionFinished && (
+              <div className="pt-6 border-t border-gray-200 mt-6">
+                <button
+                  onClick={() => setShowCompleteConfirm(true)}
+                  className="btn bg-green-600 text-white hover:bg-green-700 text-lg px-8 py-3 flex items-center gap-2"
+                >
+                  <svg
+                    className="w-5 h-5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+                    />
+                  </svg>
+                  Sessie Afsluiten - Klaar!
+                </button>
+                <p className="text-sm text-gray-500 mt-2">
+                  Sluit de sessie definitief af en markeer als voltooid
+                </p>
+              </div>
+            )}
+
+            {/* Session finished message */}
+            {sessionFinished && (
+              <div className="pt-6 border-t border-gray-200 mt-6">
+                <div className="bg-green-50 rounded-lg p-6 text-center">
+                  <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                    <svg
+                      className="w-10 h-10 text-green-600"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M5 13l4 4L19 7"
+                      />
+                    </svg>
+                  </div>
+                  <h3 className="text-xl font-semibold text-green-800 mb-2">
+                    Sessie Voltooid!
+                  </h3>
+                  <p className="text-green-700 mb-4">
+                    De consolidatie sessie is succesvol afgerond. Alle afspraken zijn vastgelegd.
+                  </p>
+                  <button
+                    onClick={handleStartNewSession}
+                    className="btn btn-primary"
+                  >
+                    Nieuwe Sessie Starten
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
 
@@ -445,6 +528,47 @@ export function ExportStep() {
             sessionName={currentSession?.name}
             onClose={handleCloseCelebration}
           />
+        )}
+
+        {/* Confirmation Modal */}
+        {showCompleteConfirm && (
+          <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+            <div className="bg-white rounded-xl shadow-xl max-w-md w-full p-6">
+              <h2 className="text-xl font-semibold text-gray-900 mb-4">
+                Sessie Afsluiten?
+              </h2>
+              <p className="text-gray-600 mb-6">
+                Weet je zeker dat je de sessie wilt afsluiten? De sessie wordt gemarkeerd als voltooid en kan niet meer worden bewerkt.
+              </p>
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setShowCompleteConfirm(false)}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50"
+                >
+                  Annuleren
+                </button>
+                <button
+                  onClick={handleCompleteSession}
+                  className="flex-1 px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 flex items-center justify-center gap-2"
+                >
+                  <svg
+                    className="w-5 h-5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M5 13l4 4L19 7"
+                    />
+                  </svg>
+                  Ja, Afsluiten
+                </button>
+              </div>
+            </div>
+          </div>
         )}
       </div>
     </div>

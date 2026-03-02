@@ -2,27 +2,26 @@
 
 import { useState, useEffect } from "react";
 import { useSession } from "@/lib/session-context";
-import { ResponseMatrix } from "@/components/consolidation";
-import {
-  ScopeAnalyzer,
-  ScopeSummary,
-  ScopeQuickAdd
-} from "@/components/scope";
-import type { ScopeItem } from "@/components/scope";
+import { useToast } from "@/components/ui";
 
 interface ScopeStepProps {
   onComplete: () => void;
 }
 
-type StepPhase = "overview" | "analyzing" | "categorizing" | "review" | "approved";
+interface ScopeItem {
+  id: string;
+  text: string;
+  source: string;
+}
 
 export function ScopeStep({ onComplete }: ScopeStepProps) {
-  const { documents, getApprovedText, saveApprovedText } = useSession();
-  const [phase, setPhase] = useState<StepPhase>("overview");
+  const { documents, getApprovedText, saveApprovedText, updateFlowState, flowState } = useSession();
+  const { showToast } = useToast();
+  const [isApproved, setIsApproved] = useState(false);
   const [scopeItems, setScopeItems] = useState<ScopeItem[]>([]);
-  const [isLoading, setIsLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [showMatrix, setShowMatrix] = useState(false);
+  const [newItemText, setNewItemText] = useState("");
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editText, setEditText] = useState("");
 
   // Get approved goals for reference
   const approvedGoals: string[] = [];
@@ -37,7 +36,7 @@ export function ScopeStep({ onComplete }: ScopeStepProps) {
   useEffect(() => {
     const approved = getApprovedText("out_of_scope");
     if (approved) {
-      setPhase("approved");
+      setIsApproved(true);
     }
   }, [getApprovedText]);
 
@@ -48,445 +47,128 @@ export function ScopeStep({ onComplete }: ScopeStepProps) {
 
     documents.forEach((doc) => {
       if (doc.parsedResponses.out_of_scope) {
-        // Split by common separators
         const parts = doc.parsedResponses.out_of_scope
           .split(/[,;\n]/)
           .map((s) => s.trim())
           .filter((s) => s.length > 0);
 
         parts.forEach((text) => {
-          items.push({
-            id: `scope-${idCounter++}`,
-            text,
-            category: "unclear",
-            source: doc.filename.replace(".docx", "")
-          });
+          // Check for duplicates
+          const exists = items.some(
+            (i) => i.text.toLowerCase() === text.toLowerCase()
+          );
+          if (!exists) {
+            items.push({
+              id: `scope-${idCounter++}`,
+              text,
+              source: doc.filename.replace(".docx", "")
+            });
+          }
         });
       }
     });
 
-    // Deduplicate by text similarity
-    const uniqueItems: ScopeItem[] = [];
-    items.forEach((item) => {
-      const exists = uniqueItems.some(
-        (u) => u.text.toLowerCase() === item.text.toLowerCase()
-      );
-      if (!exists) {
-        uniqueItems.push(item);
-      }
-    });
-
-    setScopeItems(uniqueItems);
+    setScopeItems(items);
   }, [documents]);
 
-  const handleStartAnalysis = async () => {
-    setPhase("analyzing");
-    setIsLoading(true);
-    setError(null);
+  const handleAddItem = () => {
+    if (!newItemText.trim()) return;
 
-    try {
-      const response = await fetch("/api/analyze", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          questionType: "scope",
-          responses: scopeItems.map((item) => ({
-            respondentId: item.source,
-            answer: item.text
-          })),
-          context: {
-            approvedGoals
-          }
-        })
-      });
-
-      if (!response.ok) {
-        throw new Error("Analyse mislukt");
-      }
-
-      const result = await response.json();
-
-      // Update scope items with AI suggestions
-      if (result.scopeAnalysis) {
-        const updatedItems = scopeItems.map((item) => {
-          const analysis = result.scopeAnalysis?.find(
-            (a: { text: string; category: string; conflicts?: string[]; suggestion?: string }) =>
-              a.text.toLowerCase() === item.text.toLowerCase()
-          );
-          if (analysis) {
-            return {
-              ...item,
-              category: analysis.category || "unclear",
-              conflictsWithGoals: analysis.conflicts || [],
-              suggestedClarification: analysis.suggestion
-            };
-          }
-          return item;
-        });
-        setScopeItems(updatedItems);
-      }
-
-      setPhase("categorizing");
-    } catch (err) {
-      // If AI analysis fails, just proceed to manual categorization
-      console.error("AI analysis failed:", err);
-      setPhase("categorizing");
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const handleItemsChange = (newItems: ScopeItem[]) => {
-    setScopeItems(newItems);
-  };
-
-  const handleAddItem = (text: string, category: ScopeItem["category"]) => {
     const newItem: ScopeItem = {
       id: `scope-${Date.now()}`,
-      text,
-      category,
+      text: newItemText.trim(),
       source: "Handmatig toegevoegd"
     };
     setScopeItems([...scopeItems, newItem]);
+    setNewItemText("");
+    showToast("Item toegevoegd", "success");
   };
 
-  const handleProceedToReview = () => {
-    // Mark any remaining "unclear" items as out_of_scope by default
-    const updatedItems = scopeItems.map((item) =>
-      item.category === "unclear" ? { ...item, category: "out_of_scope" as const } : item
+  const handleRemoveItem = (id: string) => {
+    setScopeItems(scopeItems.filter((item) => item.id !== id));
+  };
+
+  const handleEditStart = (item: ScopeItem) => {
+    setEditingId(item.id);
+    setEditText(item.text);
+  };
+
+  const handleEditSave = () => {
+    if (!editingId || !editText.trim()) return;
+
+    setScopeItems(
+      scopeItems.map((item) =>
+        item.id === editingId ? { ...item, text: editText.trim() } : item
+      )
     );
-    setScopeItems(updatedItems);
-    setPhase("review");
+    setEditingId(null);
+    setEditText("");
+  };
+
+  const handleEditCancel = () => {
+    setEditingId(null);
+    setEditText("");
   };
 
   const handleApprove = () => {
-    const outOfScopeItems = scopeItems
-      .filter((i) => i.category === "out_of_scope")
-      .map((i) => i.text);
+    if (scopeItems.length === 0) {
+      showToast("Voeg minstens één item toe", "warning");
+      return;
+    }
 
-    const scopeText = outOfScopeItems.map((item) => `• ${item}`).join("\n");
+    const scopeText = scopeItems.map((item) => `• ${item.text}`).join("\n");
     saveApprovedText("out_of_scope", scopeText, "scope", "scope-final");
-    setPhase("approved");
+
+    updateFlowState({
+      scope: { ...flowState.scope, status: "approved" }
+    });
+
+    setIsApproved(true);
+    showToast("Scope kaders succesvol vastgesteld!", "success");
     onComplete();
   };
 
   const approved = getApprovedText("out_of_scope");
-  const outOfScopeItems = scopeItems
-    .filter((i) => i.category === "out_of_scope")
-    .map((i) => i.text);
-  const inScopeItems = scopeItems
-    .filter((i) => i.category === "in_scope")
-    .map((i) => i.text);
 
   return (
     <div className="p-8">
-      <div className="max-w-5xl mx-auto">
+      <div className="max-w-4xl mx-auto">
         {/* Header */}
         <div className="mb-8">
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">
-            Scope afbakening
-          </h1>
-          <p className="text-gray-600">
-            Bepaal wat binnen en buiten de scope van het programma valt.
-          </p>
-
-          {/* Phase indicator */}
-          <div className="mt-4 flex items-center gap-2">
-            {["overview", "categorizing", "review", "approved"].map((p, index) => (
-              <div key={p} className="flex items-center">
-                {index > 0 && <div className="w-8 h-0.5 bg-gray-300 mx-1" />}
-                <div
-                  className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                    phase === p || (phase === "analyzing" && p === "overview")
-                      ? "bg-cito-blue text-white"
-                      : ["overview", "categorizing", "review", "approved"].indexOf(
-                          phase === "analyzing" ? "overview" : phase
-                        ) > index
-                      ? "bg-cito-green text-white"
-                      : "bg-gray-200 text-gray-500"
-                  }`}
-                >
-                  {index + 1}
-                </div>
-              </div>
-            ))}
+          <div className="flex items-center gap-4 mb-4">
+            <div className="w-14 h-14 bg-orange-500 rounded-full flex items-center justify-center">
+              <svg className="w-7 h-7 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+              </svg>
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold text-gray-900">
+                Scope Afbakening
+              </h1>
+              <p className="text-gray-600">
+                Bepaal wat <strong>buiten scope</strong> valt om de kaders te bepalen
+              </p>
+            </div>
           </div>
         </div>
 
-        {/* Error display */}
-        {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
-            {error}
-          </div>
-        )}
-
-        {/* Phase: Overview */}
-        {phase === "overview" && (
-          <div className="space-y-6">
-            {/* Toggle view */}
-            <div className="flex justify-end">
-              <button
-                onClick={() => setShowMatrix(!showMatrix)}
-                className="text-sm text-cito-blue hover:underline flex items-center gap-1"
-              >
-                {showMatrix ? (
-                  <>
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M4 6h16M4 10h16M4 14h16M4 18h16"
-                      />
-                    </svg>
-                    Lijst weergave
-                  </>
-                ) : (
-                  <>
-                    <svg
-                      className="w-4 h-4"
-                      fill="none"
-                      stroke="currentColor"
-                      viewBox="0 0 24 24"
-                    >
-                      <path
-                        strokeLinecap="round"
-                        strokeLinejoin="round"
-                        strokeWidth={2}
-                        d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zM14 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z"
-                      />
-                    </svg>
-                    Matrix weergave
-                  </>
-                )}
-              </button>
-            </div>
-
-            {showMatrix ? (
-              <div className="card overflow-hidden">
-                <h2 className="text-lg font-semibold text-gray-900 mb-4">
-                  Scope items vergelijken
-                </h2>
-                <ResponseMatrix
-                  documents={documents}
-                  questionTypes={["out_of_scope"]}
-                  highlightConsensus
-                />
-              </div>
-            ) : (
-              <div className="card">
-                <h2 className="text-lg font-semibold text-gray-900 mb-4">
-                  Gevonden scope-items ({scopeItems.length})
-                </h2>
-
-                {scopeItems.length === 0 ? (
-                  <p className="text-gray-500">
-                    Geen scope-items gevonden in de documenten.
-                  </p>
-                ) : (
-                  <div className="space-y-3">
-                    {documents
-                      .filter((doc) => doc.parsedResponses.out_of_scope)
-                      .map((doc) => (
-                        <div key={doc.id} className="p-4 bg-gray-50 rounded-lg">
-                          <p className="text-sm font-medium text-cito-blue mb-2">
-                            {doc.filename.replace(".docx", "")}
-                          </p>
-                          <p className="text-gray-700">
-                            {doc.parsedResponses.out_of_scope}
-                          </p>
-                        </div>
-                      ))}
-                  </div>
-                )}
-              </div>
-            )}
-
-            {/* Goals reference */}
-            {approvedGoals.length > 0 && (
-              <div className="card bg-cito-light-blue">
-                <h3 className="font-semibold text-cito-blue mb-3">
-                  Goedgekeurde doelen (ter referentie)
-                </h3>
-                <ul className="space-y-2">
-                  {approvedGoals.map((goal, index) => (
-                    <li key={index} className="flex items-start gap-2 text-gray-700">
-                      <span className="w-6 h-6 bg-cito-blue text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">
-                        {index + 1}
-                      </span>
-                      <span>{goal}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
-            {scopeItems.length > 0 && (
-              <div className="flex justify-end">
-                <button
-                  onClick={handleStartAnalysis}
-                  className="btn btn-primary flex items-center gap-2"
-                >
-                  <svg
-                    className="w-5 h-5"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
-                    />
-                  </svg>
-                  AI Analyse starten
-                </button>
-              </div>
-            )}
-          </div>
-        )}
-
-        {/* Phase: Analyzing */}
-        {phase === "analyzing" && (
-          <div className="card text-center py-12">
-            <div className="spinner mx-auto mb-4" />
-            <p className="text-gray-600 text-lg">
-              AI analyseert scope-items...
-            </p>
-            <p className="text-gray-500 text-sm mt-2">
-              Controleert op conflicten met doelen en groepering
-            </p>
-          </div>
-        )}
-
-        {/* Phase: Categorizing */}
-        {phase === "categorizing" && (
-          <div className="space-y-6">
-            <div className="card">
-              <h2 className="text-lg font-semibold text-gray-900 mb-2">
-                Categoriseer scope-items
-              </h2>
-              <p className="text-gray-600 mb-6">
-                Sleep items naar de juiste categorie of voeg nieuwe toe.
-              </p>
-
-              <ScopeAnalyzer
-                items={scopeItems}
-                approvedGoals={approvedGoals}
-                onItemsChange={handleItemsChange}
-              />
-            </div>
-
-            <ScopeQuickAdd onAdd={handleAddItem} />
-
-            <div className="flex justify-between">
-              <button
-                onClick={() => setPhase("overview")}
-                className="btn btn-secondary"
-              >
-                Terug naar overzicht
-              </button>
-              <button
-                onClick={handleProceedToReview}
-                className="btn btn-primary flex items-center gap-2"
-              >
-                Door naar review
-                <svg
-                  className="w-5 h-5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9 5l7 7-7 7"
-                  />
-                </svg>
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Phase: Review */}
-        {phase === "review" && (
-          <div className="space-y-6">
-            <div className="card">
-              <h2 className="text-lg font-semibold text-gray-900 mb-4">
-                Review scope-afbakening
-              </h2>
-
-              <ScopeSummary
-                outOfScopeItems={outOfScopeItems}
-                inScopeItems={inScopeItems}
-              />
-            </div>
-
-            <div className="flex justify-between">
-              <button
-                onClick={() => setPhase("categorizing")}
-                className="btn btn-secondary"
-              >
-                Terug naar bewerken
-              </button>
-              <button
-                onClick={handleApprove}
-                disabled={outOfScopeItems.length === 0}
-                className="btn btn-success flex items-center gap-2 disabled:opacity-50"
-              >
-                <svg
-                  className="w-5 h-5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M5 13l4 4L19 7"
-                  />
-                </svg>
-                Goedkeuren
-              </button>
-            </div>
-          </div>
-        )}
-
-        {/* Phase: Approved */}
-        {phase === "approved" && approved && (
-          <div className="space-y-6">
+        {/* Already approved state */}
+        {isApproved && approved ? (
+          <div className="space-y-6 animate-fade-in">
             <div className="card bg-green-50 border-2 border-green-300">
               <div className="flex items-start gap-4">
                 <div className="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0">
-                  <svg
-                    className="w-6 h-6 text-white"
-                    fill="none"
-                    stroke="currentColor"
-                    viewBox="0 0 24 24"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M5 13l4 4L19 7"
-                    />
+                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
                 </div>
                 <div className="flex-1">
                   <h2 className="text-xl font-semibold text-green-800 mb-4">
-                    Scope vastgesteld
+                    Scope Kaders Vastgesteld
                   </h2>
                   <div className="space-y-2">
                     <h3 className="font-medium text-gray-700">Buiten scope:</h3>
-                    <div className="text-gray-800 whitespace-pre-line">
+                    <div className="text-gray-800 whitespace-pre-line bg-white rounded-lg p-4">
                       {approved.text}
                     </div>
                   </div>
@@ -495,24 +177,182 @@ export function ScopeStep({ onComplete }: ScopeStepProps) {
             </div>
 
             <div className="flex justify-end">
-              <button
-                onClick={onComplete}
-                className="btn btn-primary flex items-center gap-2"
-              >
+              <button onClick={onComplete} className="btn btn-primary flex items-center gap-2">
                 Naar export
-                <svg
-                  className="w-5 h-5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9 5l7 7-7 7"
-                  />
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                 </svg>
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {/* Info card */}
+            <div className="card bg-orange-50 border-orange-200">
+              <div className="flex items-start gap-3">
+                <svg className="w-6 h-6 text-orange-500 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <div>
+                  <h3 className="font-semibold text-orange-800">Wat hoort hier niet bij?</h3>
+                  <p className="text-orange-700 text-sm mt-1">
+                    Door duidelijk te bepalen wat <strong>buiten scope</strong> valt, ontstaat helderheid over de kaders van het programma.
+                    Dit voorkomt scope creep en houdt de focus scherp.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {/* Goals reference */}
+            {approvedGoals.length > 0 && (
+              <div className="card bg-cito-light-blue">
+                <h3 className="font-semibold text-cito-blue mb-3 flex items-center gap-2">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+                  </svg>
+                  Goedgekeurde doelen (ter referentie)
+                </h3>
+                <ul className="space-y-2">
+                  {approvedGoals.map((goal, index) => (
+                    <li key={index} className="flex items-start gap-2 text-gray-700">
+                      <span className="w-6 h-6 bg-cito-blue text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">
+                        {index + 1}
+                      </span>
+                      <span className="text-sm">{goal}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
+            {/* Out of scope items */}
+            <div className="card">
+              <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
+                <svg className="w-5 h-5 text-orange-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636" />
+                </svg>
+                Buiten Scope ({scopeItems.length} items)
+              </h2>
+
+              {scopeItems.length === 0 ? (
+                <div className="text-center py-8 text-gray-500">
+                  <svg className="w-12 h-12 mx-auto mb-3 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M9 13h6m-3-3v6m5 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                  </svg>
+                  <p>Nog geen items toegevoegd</p>
+                  <p className="text-sm">Voeg items toe die buiten scope vallen</p>
+                </div>
+              ) : (
+                <ul className="space-y-3">
+                  {scopeItems.map((item, index) => (
+                    <li
+                      key={item.id}
+                      className="flex items-start gap-3 p-3 bg-orange-50 rounded-lg border border-orange-200 animate-slide-in-up"
+                      style={{ animationDelay: `${index * 0.05}s` }}
+                    >
+                      <div className="w-8 h-8 bg-orange-500 rounded-full flex items-center justify-center text-white font-medium flex-shrink-0">
+                        {index + 1}
+                      </div>
+
+                      {editingId === item.id ? (
+                        <div className="flex-1 flex gap-2">
+                          <input
+                            type="text"
+                            value={editText}
+                            onChange={(e) => setEditText(e.target.value)}
+                            className="flex-1 px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cito-blue"
+                            autoFocus
+                          />
+                          <button
+                            onClick={handleEditSave}
+                            className="px-3 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                            </svg>
+                          </button>
+                          <button
+                            onClick={handleEditCancel}
+                            className="px-3 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <div className="flex-1">
+                            <p className="text-gray-800">{item.text}</p>
+                            <p className="text-xs text-gray-500 mt-1">Bron: {item.source}</p>
+                          </div>
+                          <div className="flex gap-1">
+                            <button
+                              onClick={() => handleEditStart(item)}
+                              className="p-2 text-gray-400 hover:text-cito-blue rounded transition-colors"
+                              title="Bewerken"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                              </svg>
+                            </button>
+                            <button
+                              onClick={() => handleRemoveItem(item.id)}
+                              className="p-2 text-gray-400 hover:text-red-500 rounded transition-colors"
+                              title="Verwijderen"
+                            >
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                              </svg>
+                            </button>
+                          </div>
+                        </>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              )}
+
+              {/* Add new item */}
+              <div className="mt-4 pt-4 border-t border-gray-200">
+                <label htmlFor="new-scope-item" className="block text-sm font-medium text-gray-700 mb-2">
+                  Nieuw item toevoegen
+                </label>
+                <div className="flex gap-2">
+                  <input
+                    id="new-scope-item"
+                    type="text"
+                    value={newItemText}
+                    onChange={(e) => setNewItemText(e.target.value)}
+                    onKeyDown={(e) => e.key === "Enter" && handleAddItem()}
+                    placeholder="Wat valt buiten scope?"
+                    className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cito-blue focus:border-cito-blue"
+                  />
+                  <button
+                    onClick={handleAddItem}
+                    disabled={!newItemText.trim()}
+                    className="btn btn-primary disabled:opacity-50"
+                    aria-label="Item toevoegen"
+                  >
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Action buttons */}
+            <div className="flex justify-end">
+              <button
+                onClick={handleApprove}
+                disabled={scopeItems.length === 0}
+                className="btn btn-success text-lg px-8 py-3 flex items-center gap-2 disabled:opacity-50"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+                Scope Kaders Goedkeuren
               </button>
             </div>
           </div>

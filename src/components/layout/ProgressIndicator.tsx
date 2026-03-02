@@ -18,7 +18,7 @@ export function ProgressIndicator({ currentStep, onStepClick }: ProgressIndicato
     {
       key: "visie",
       label: "Visie",
-      subSteps: ["visie_huidige", "visie_gewenste", "visie_beweging", "visie_stakeholders"]
+      subSteps: ["visie_huidige", "visie_gewenste", "visie_beweging", "visie_stakeholders", "visie_samenvatting"]
     },
     { key: "doelen", label: "Doelen" },
     { key: "scope", label: "Scope" },
@@ -33,7 +33,8 @@ export function ProgressIndicator({ currentStep, onStepClick }: ProgressIndicato
     activeStep === "visie_huidige" ||
     activeStep === "visie_gewenste" ||
     activeStep === "visie_beweging" ||
-    activeStep === "visie_stakeholders"
+    activeStep === "visie_stakeholders" ||
+    activeStep === "visie_samenvatting"
   );
 
   const getVisieStatus = (): StepStatus => {
@@ -41,11 +42,13 @@ export function ProgressIndicator({ currentStep, onStepClick }: ProgressIndicato
     const gewenste = getStepStatus("visie_gewenste");
     const beweging = getStepStatus("visie_beweging");
     const stakeholders = getStepStatus("visie_stakeholders");
+    const samenvatting = getStepStatus("visie_samenvatting");
 
-    if (huidige === "completed" && gewenste === "completed" && beweging === "completed" && stakeholders === "completed") {
+    // All 5 visie steps must be completed for visie to be complete
+    if (huidige === "completed" && gewenste === "completed" && beweging === "completed" && stakeholders === "completed" && samenvatting === "completed") {
       return "completed";
     }
-    if (huidige !== "locked" || gewenste !== "locked" || beweging !== "locked" || stakeholders !== "locked") {
+    if (huidige !== "locked" || gewenste !== "locked" || beweging !== "locked" || stakeholders !== "locked" || samenvatting !== "locked") {
       return "active";
     }
     return "locked";
@@ -54,8 +57,8 @@ export function ProgressIndicator({ currentStep, onStepClick }: ProgressIndicato
   const renderStepIndicator = (status: StepStatus, isActive: boolean) => {
     if (status === "completed") {
       return (
-        <div className="step-indicator completed">
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="step-indicator completed" role="img" aria-label="Voltooid">
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
           </svg>
         </div>
@@ -63,10 +66,10 @@ export function ProgressIndicator({ currentStep, onStepClick }: ProgressIndicato
     }
 
     if (status === "active" || isActive) {
-      return <div className="step-indicator active" />;
+      return <div className="step-indicator active" role="img" aria-label="Actief" />;
     }
 
-    return <div className="step-indicator locked" />;
+    return <div className="step-indicator locked" role="img" aria-label="Vergrendeld" />;
   };
 
   return (
@@ -124,8 +127,8 @@ export function ProgressIndicator({ currentStep, onStepClick }: ProgressIndicato
 
         {/* Visie substeps (only show when in visie) */}
         {isVisieActive && (
-          <div className="mt-4 ml-[calc(20%+8px)] flex items-center gap-4">
-            {["visie_huidige", "visie_gewenste", "visie_beweging", "visie_stakeholders"].map(
+          <div className="mt-4 ml-0 md:ml-[calc(20%+8px)] flex flex-wrap items-center gap-2 md:gap-4">
+            {["visie_huidige", "visie_gewenste", "visie_beweging", "visie_stakeholders", "visie_samenvatting"].map(
               (subStep, index) => {
                 const step = subStep as FlowStep;
                 const status = getStepStatus(step);

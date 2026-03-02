@@ -16,7 +16,10 @@ interface ProposalCardProps {
   currentVote?: VoteValue;
   editable?: boolean;
   onEdit?: (text: string) => void;
+  onRegenerate?: () => void;
+  isRegenerating?: boolean;
   showVoting?: boolean;
+  contextLabel?: string; // e.g., "Huidige situatie", "Gewenste situatie"
 }
 
 export function ProposalCard({
@@ -30,7 +33,10 @@ export function ProposalCard({
   currentVote,
   editable = false,
   onEdit,
-  showVoting = false
+  onRegenerate,
+  isRegenerating = false,
+  showVoting = false,
+  contextLabel
 }: ProposalCardProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedText, setEditedText] = useState(variant.text);
@@ -42,13 +48,15 @@ export function ProposalCard({
     setIsEditing(false);
   };
 
-  const typeLabels: Record<string, { label: string; icon: string }> = {
-    beknopt: { label: "Beknopt", icon: "📝" },
-    volledig: { label: "Volledig", icon: "📄" },
-    gebalanceerd: { label: "Gebalanceerd", icon: "⚖️" }
+  // Type labels with optional context prefix
+  const baseTypeLabels: Record<string, { label: string; icon: string; description: string }> = {
+    beknopt: { label: "Kernachtig", icon: "📝", description: "Korte, krachtige formulering" },
+    volledig: { label: "Uitgebreid", icon: "📄", description: "Alle nuances meegenomen" },
+    gebalanceerd: { label: "Gebalanceerd", icon: "⚖️", description: "Evenwichtige formulering" }
   };
 
-  const typeInfo = typeLabels[variant.type] || { label: variant.type, icon: "📋" };
+  const typeInfo = baseTypeLabels[variant.type] || { label: variant.type, icon: "📋", description: "" };
+  const displayLabel = contextLabel ? `${typeInfo.label}` : typeInfo.label;
 
   return (
     <div
@@ -77,12 +85,17 @@ export function ProposalCard({
           )}
 
           {isSelected && (
-            <div className="w-6 h-6 bg-cito-blue rounded-full flex items-center justify-center">
+            <div
+              className="w-6 h-6 bg-cito-blue rounded-full flex items-center justify-center"
+              role="img"
+              aria-label="Geselecteerd"
+            >
               <svg
                 className="w-4 h-4 text-white"
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
+                aria-hidden="true"
               >
                 <path
                   strokeLinecap="round"
@@ -100,13 +113,18 @@ export function ProposalCard({
       <div className="p-4">
         {isEditing ? (
           <div className="space-y-3">
+            <label htmlFor={`edit-proposal-${variant.id}`} className="sr-only">
+              Bewerk voorstel tekst
+            </label>
             <textarea
+              id={`edit-proposal-${variant.id}`}
               value={editedText}
               onChange={(e) => setEditedText(e.target.value)}
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cito-blue"
               rows={4}
               autoFocus
               onClick={(e) => e.stopPropagation()}
+              aria-label="Bewerk voorstel tekst"
             />
             <div className="flex gap-2">
               <button
@@ -134,30 +152,70 @@ export function ProposalCard({
           <>
             <p className="text-gray-800 leading-relaxed">{variant.text}</p>
 
-            {/* Edit button */}
-            {editable && onEdit && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setIsEditing(true);
-                }}
-                className="mt-2 text-sm text-cito-blue hover:underline flex items-center gap-1"
-              >
-                <svg
-                  className="w-3 h-3"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
-                  />
-                </svg>
-                Tekst aanpassen
-              </button>
+            {/* Edit and regenerate buttons */}
+            {(editable || onRegenerate) && (
+              <div className="mt-3 flex items-center gap-3">
+                {editable && onEdit && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsEditing(true);
+                    }}
+                    className="text-sm text-gray-600 hover:text-cito-blue flex items-center gap-1 transition-colors"
+                  >
+                    <svg
+                      className="w-4 h-4"
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                      aria-hidden="true"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z"
+                      />
+                    </svg>
+                    Handmatig aanpassen
+                  </button>
+                )}
+                {onRegenerate && (
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onRegenerate();
+                    }}
+                    disabled={isRegenerating}
+                    className="text-sm text-cito-blue hover:text-blue-800 flex items-center gap-1 transition-colors disabled:opacity-50"
+                  >
+                    {isRegenerating ? (
+                      <>
+                        <span className="spinner w-4 h-4" />
+                        Genereren...
+                      </>
+                    ) : (
+                      <>
+                        <svg
+                          className="w-4 h-4"
+                          fill="none"
+                          stroke="currentColor"
+                          viewBox="0 0 24 24"
+                          aria-hidden="true"
+                        >
+                          <path
+                            strokeLinecap="round"
+                            strokeLinejoin="round"
+                            strokeWidth={2}
+                            d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                          />
+                        </svg>
+                        AI opnieuw genereren
+                      </>
+                    )}
+                  </button>
+                )}
+              </div>
             )}
           </>
         )}
@@ -215,6 +273,8 @@ interface ProposalTabsProps {
   onSelect: (variantId: string) => void;
   editable?: boolean;
   onEditVariant?: (variantId: string, text: string) => void;
+  onRegenerateVariant?: (variantId: string) => void;
+  isRegenerating?: boolean;
 }
 
 export function ProposalTabs({
@@ -223,7 +283,9 @@ export function ProposalTabs({
   recommendedType,
   onSelect,
   editable = false,
-  onEditVariant
+  onEditVariant,
+  onRegenerateVariant,
+  isRegenerating = false
 }: ProposalTabsProps) {
   const [activeTab, setActiveTab] = useState(
     variants.find((v) => v.type === recommendedType)?.id || variants[0]?.id
@@ -276,6 +338,12 @@ export function ProposalTabs({
                 ? (text) => onEditVariant(activeVariant.id, text)
                 : undefined
             }
+            onRegenerate={
+              onRegenerateVariant
+                ? () => onRegenerateVariant(activeVariant.id)
+                : undefined
+            }
+            isRegenerating={isRegenerating}
           />
         </div>
       )}

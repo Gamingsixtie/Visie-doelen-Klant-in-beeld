@@ -16,6 +16,12 @@ interface GoalClusterType {
   description: string;
   goals: Goal[];
   votes: number;
+  aiAveragePriority?: number;
+  priorityBreakdown?: {
+    prio1: number;
+    prio2: number;
+    prio3: number;
+  };
 }
 
 interface GoalClusterProps {
@@ -46,9 +52,18 @@ export function GoalCluster({
     setIsEditing(false);
   };
 
-  // Calculate average rank from original priorities
-  const avgRank =
-    cluster.goals.reduce((sum, g) => sum + g.rank, 0) / cluster.goals.length;
+  // Calculate average rank from original priorities, or use AI-provided
+  const avgRank = cluster.aiAveragePriority ||
+    (cluster.goals.length > 0
+      ? cluster.goals.reduce((sum, g) => sum + g.rank, 0) / cluster.goals.length
+      : 2.0);
+
+  // Count priorities for breakdown display
+  const prioCount = cluster.priorityBreakdown || {
+    prio1: cluster.goals.filter(g => g.rank === 1).length,
+    prio2: cluster.goals.filter(g => g.rank === 2).length,
+    prio3: cluster.goals.filter(g => g.rank === 3).length
+  };
 
   return (
     <div
@@ -97,18 +112,42 @@ export function GoalCluster({
               {cluster.goals.length} respondent{cluster.goals.length > 1 ? "en" : ""}
             </span>
 
+            {/* Priority breakdown badges */}
+            <div className="flex items-center gap-1">
+              {prioCount.prio1 > 0 && (
+                <span className="px-1.5 py-0.5 bg-green-100 text-green-700 text-xs rounded font-medium" title="Aantal keer als #1 prioriteit genoemd">
+                  {prioCount.prio1}× #1
+                </span>
+              )}
+              {prioCount.prio2 > 0 && (
+                <span className="px-1.5 py-0.5 bg-yellow-100 text-yellow-700 text-xs rounded font-medium" title="Aantal keer als #2 prioriteit genoemd">
+                  {prioCount.prio2}× #2
+                </span>
+              )}
+              {prioCount.prio3 > 0 && (
+                <span className="px-1.5 py-0.5 bg-orange-100 text-orange-700 text-xs rounded font-medium" title="Aantal keer als #3 prioriteit genoemd">
+                  {prioCount.prio3}× #3
+                </span>
+              )}
+            </div>
+
             {/* Average priority indicator */}
-            <span
-              className={`px-2 py-1 text-xs rounded-full ${
-                avgRank <= 1.5
-                  ? "bg-green-100 text-green-700"
-                  : avgRank <= 2.5
-                  ? "bg-yellow-100 text-yellow-700"
-                  : "bg-orange-100 text-orange-700"
+            <div
+              className={`px-2 py-1 text-xs rounded-full flex items-center gap-1 ${
+                avgRank <= 1.3
+                  ? "bg-green-500 text-white"
+                  : avgRank <= 1.8
+                  ? "bg-blue-500 text-white"
+                  : avgRank <= 2.3
+                  ? "bg-yellow-500 text-white"
+                  : "bg-orange-500 text-white"
               }`}
+              title={`Gemiddelde prioriteit: ${avgRank.toFixed(1)} (1=hoogst, 3=laagst)`}
             >
-              Gem. prioriteit: {avgRank.toFixed(1)}
-            </span>
+              <span className="font-medium">
+                Gem: {avgRank.toFixed(1)}
+              </span>
+            </div>
 
             {/* Edit button */}
             {editable && !isEditing && (
@@ -182,7 +221,7 @@ export function GoalCluster({
         )}
       </div>
 
-      {/* Original goals (expandable) */}
+      {/* Original goals (expandable) - shows how this cluster was formed */}
       <div className="border-t border-gray-200">
         <button
           onClick={(e) => {
@@ -191,7 +230,12 @@ export function GoalCluster({
           }}
           className="w-full px-4 py-2 flex items-center justify-between text-sm text-gray-600 hover:bg-gray-50"
         >
-          <span className="font-medium">Originele doelen bekijken</span>
+          <span className="font-medium flex items-center gap-2">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+            </svg>
+            Bekijk samengevoegde doelen ({cluster.goals.length})
+          </span>
           <svg
             className={`w-4 h-4 transform transition-transform ${
               isExpanded ? "rotate-180" : ""
@@ -210,24 +254,54 @@ export function GoalCluster({
         </button>
 
         {isExpanded && (
-          <div className="px-4 pb-4 space-y-2">
-            {cluster.goals.map((goal) => (
-              <div
-                key={goal.id}
-                className="p-3 bg-gray-50 rounded border-l-4 border-gray-300"
-                onClick={(e) => e.stopPropagation()}
-              >
-                <div className="flex items-center justify-between mb-1">
-                  <span className="text-sm font-medium text-gray-700">
-                    {goal.respondentName}
-                  </span>
-                  <span className="text-xs text-gray-500 bg-gray-200 px-2 py-0.5 rounded">
-                    Prioriteit {goal.rank}
-                  </span>
+          <div className="px-4 pb-4 space-y-3" onClick={(e) => e.stopPropagation()}>
+            {/* Explanation */}
+            <div className="p-2 bg-blue-50 rounded text-xs text-blue-700">
+              <strong>Dit cluster is samengesteld uit {cluster.goals.length} vergelijkbare doelen:</strong>
+              <br />
+              De AI heeft deze doelen gegroepeerd omdat ze over hetzelfde thema gaan.
+            </div>
+
+            {/* Goals grouped by priority */}
+            {[1, 2, 3].map((prio) => {
+              const goalsWithPrio = cluster.goals.filter(g => g.rank === prio);
+              if (goalsWithPrio.length === 0) return null;
+
+              return (
+                <div key={prio} className="space-y-2">
+                  <div className={`text-xs font-semibold px-2 py-1 rounded inline-block ${
+                    prio === 1 ? "bg-green-100 text-green-700" :
+                    prio === 2 ? "bg-yellow-100 text-yellow-700" :
+                    "bg-orange-100 text-orange-700"
+                  }`}>
+                    Prioriteit #{prio} ({goalsWithPrio.length}×)
+                  </div>
+                  {goalsWithPrio.map((goal) => (
+                    <div
+                      key={goal.id}
+                      className={`p-3 bg-white rounded border-l-4 shadow-sm ${
+                        prio === 1 ? "border-green-400" :
+                        prio === 2 ? "border-yellow-400" :
+                        "border-orange-400"
+                      }`}
+                    >
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-sm font-medium text-gray-900">
+                          {goal.respondentName}
+                        </span>
+                      </div>
+                      <p className="text-sm text-gray-700">{goal.text}</p>
+                    </div>
+                  ))}
                 </div>
-                <p className="text-sm text-gray-600">{goal.text}</p>
-              </div>
-            ))}
+              );
+            })}
+
+            {cluster.goals.length === 0 && (
+              <p className="text-sm text-gray-500 italic">
+                Geen specifieke doelen gekoppeld. Dit thema is geïdentificeerd door de AI op basis van patronen in de input.
+              </p>
+            )}
           </div>
         )}
       </div>
@@ -279,6 +353,37 @@ export function GoalClusterList({
 
   return (
     <div className="space-y-4">
+      {/* Legenda voor prioriteit badges */}
+      <div className="p-3 bg-gray-50 rounded-lg border border-gray-200">
+        <p className="text-sm font-medium text-gray-700 mb-2">Zo lees je de badges:</p>
+        <div className="grid grid-cols-2 gap-3 text-xs">
+          <div>
+            <p className="font-medium text-gray-600 mb-1">Prioriteit badges:</p>
+            <div className="flex flex-wrap gap-1">
+              <span className="px-1.5 py-0.5 bg-green-100 text-green-700 rounded">2× #1</span>
+              <span className="text-gray-500">= 2 MT-leden gaven dit prioriteit 1</span>
+            </div>
+            <div className="flex flex-wrap gap-1 mt-1">
+              <span className="px-1.5 py-0.5 bg-yellow-100 text-yellow-700 rounded">1× #2</span>
+              <span className="text-gray-500">= 1 MT-lid gaf dit prioriteit 2</span>
+            </div>
+          </div>
+          <div>
+            <p className="font-medium text-gray-600 mb-1">Gemiddelde score:</p>
+            <div className="space-y-1">
+              <div className="flex items-center gap-1">
+                <span className="px-2 py-0.5 bg-green-500 text-white rounded text-xs">Gem: 1.0</span>
+                <span className="text-gray-500">= Iedereen gaf #1</span>
+              </div>
+              <div className="flex items-center gap-1">
+                <span className="px-2 py-0.5 bg-orange-500 text-white rounded text-xs">Gem: 2.5</span>
+                <span className="text-gray-500">= Mix van #2 en #3</span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div className="flex items-center justify-between text-sm text-gray-600">
         <span>
           {selectedIds.length}/{maxSelections} doelen geselecteerd

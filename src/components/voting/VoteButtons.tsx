@@ -52,6 +52,7 @@ export function VoteButtons({
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
+            aria-hidden="true"
           >
             <path
               strokeLinecap="round"
@@ -76,6 +77,7 @@ export function VoteButtons({
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
+            aria-hidden="true"
           >
             <path
               strokeLinecap="round"
@@ -100,6 +102,7 @@ export function VoteButtons({
             fill="none"
             stroke="currentColor"
             viewBox="0 0 24 24"
+            aria-hidden="true"
           >
             <path
               strokeLinecap="round"
@@ -115,10 +118,11 @@ export function VoteButtons({
       {/* Comment field for disagree */}
       {showComment && (
         <div className="p-4 bg-red-50 border border-red-200 rounded-lg">
-          <label className="block text-sm font-medium text-red-800 mb-2">
+          <label htmlFor="disagree-comment" className="block text-sm font-medium text-red-800 mb-2">
             Toelichting bij bezwaar (verplicht)
           </label>
           <textarea
+            id="disagree-comment"
             value={comment}
             onChange={(e) => setComment(e.target.value)}
             placeholder="Geef aan waarom je bezwaar hebt..."
@@ -173,12 +177,14 @@ export function VoteButtonsCompact({
             : "bg-gray-100 text-gray-600 hover:bg-green-100 hover:text-green-700"
         } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
         title="Akkoord"
+        aria-label="Akkoord"
       >
         <svg
           className="w-4 h-4"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
+          aria-hidden="true"
         >
           <path
             strokeLinecap="round"
@@ -198,12 +204,14 @@ export function VoteButtonsCompact({
             : "bg-gray-100 text-gray-600 hover:bg-red-100 hover:text-red-700"
         } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
         title="Bezwaar"
+        aria-label="Bezwaar"
       >
         <svg
           className="w-4 h-4"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
+          aria-hidden="true"
         >
           <path
             strokeLinecap="round"
@@ -223,12 +231,14 @@ export function VoteButtonsCompact({
             : "bg-gray-100 text-gray-600 hover:bg-gray-200"
         } ${disabled ? "opacity-50 cursor-not-allowed" : ""}`}
         title="Onthouding"
+        aria-label="Onthouding"
       >
         <svg
           className="w-4 h-4"
           fill="none"
           stroke="currentColor"
           viewBox="0 0 24 24"
+          aria-hidden="true"
         >
           <path
             strokeLinecap="round"

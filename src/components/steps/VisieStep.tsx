@@ -1,15 +1,19 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useSession } from "@/lib/session-context";
+import { useToast } from "@/components/ui";
 import { ResponseMatrix } from "@/components/consolidation";
 import { ThemeClusterList } from "@/components/consolidation/ThemeCluster";
+import { ThemeVoting, ThemeVotingResults, type ThemeWithVotes } from "@/components/consolidation";
 import { ProposalCard } from "@/components/voting";
 import type { QuestionType, ThemeCluster, ProposalVariant } from "@/lib/types";
+import * as persistence from "@/lib/persistence";
 
 interface VisieStepProps {
   subStep: "visie_huidige" | "visie_gewenste" | "visie_beweging" | "visie_stakeholders";
   onComplete: () => void;
+  onNavigateToStep?: (step: "visie_huidige" | "visie_gewenste" | "visie_beweging" | "visie_stakeholders" | "visie_samenvatting") => void;
 }
 
 const SUB_STEP_CONFIG: Record<
@@ -38,10 +42,76 @@ const SUB_STEP_CONFIG: Record<
   }
 };
 
-type StepPhase = "overview" | "analyzing" | "themes" | "voting" | "approved";
+type StepPhase = "overview" | "analyzing" | "themes" | "theme_voting" | "voting_results" | "voting" | "approved";
 
-export function VisieStep({ subStep, onComplete }: VisieStepProps) {
-  const { documents, saveApprovedText, getApprovedText } = useSession();
+// Inline component for adding manual theme in voting results
+function AddManualThemeInline({ onAdd }: { onAdd: (name: string) => void }) {
+  const [isAdding, setIsAdding] = useState(false);
+  const [themeName, setThemeName] = useState("");
+
+  if (!isAdding) {
+    return (
+      <button
+        onClick={() => setIsAdding(true)}
+        className="text-sm text-cito-blue hover:underline flex items-center gap-1"
+      >
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+        </svg>
+        Nieuw thema handmatig toevoegen
+      </button>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-2">
+      <input
+        type="text"
+        value={themeName}
+        onChange={(e) => setThemeName(e.target.value)}
+        placeholder="Naam van het thema..."
+        className="flex-1 px-3 py-1.5 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cito-blue"
+        autoFocus
+        onKeyDown={(e) => {
+          if (e.key === "Enter" && themeName.trim()) {
+            onAdd(themeName.trim());
+            setThemeName("");
+            setIsAdding(false);
+          } else if (e.key === "Escape") {
+            setIsAdding(false);
+            setThemeName("");
+          }
+        }}
+      />
+      <button
+        onClick={() => {
+          if (themeName.trim()) {
+            onAdd(themeName.trim());
+            setThemeName("");
+            setIsAdding(false);
+          }
+        }}
+        disabled={!themeName.trim()}
+        className="px-3 py-1.5 bg-cito-blue text-white text-sm rounded-lg hover:bg-blue-800 disabled:opacity-50"
+      >
+        Toevoegen
+      </button>
+      <button
+        onClick={() => {
+          setIsAdding(false);
+          setThemeName("");
+        }}
+        className="px-3 py-1.5 bg-gray-200 text-gray-700 text-sm rounded-lg hover:bg-gray-300"
+      >
+        Annuleren
+      </button>
+    </div>
+  );
+}
+
+export function VisieStep({ subStep, onComplete, onNavigateToStep }: VisieStepProps) {
+  const { documents, saveApprovedText, getApprovedText, updateFlowState, flowState, currentSession } = useSession();
+  const { showToast } = useToast();
   const config = SUB_STEP_CONFIG[subStep];
 
   const [phase, setPhase] = useState<StepPhase>("overview");
@@ -52,14 +122,34 @@ export function VisieStep({ subStep, onComplete }: VisieStepProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [showMatrix, setShowMatrix] = useState(false);
+  const [votedThemes, setVotedThemes] = useState<ThemeWithVotes[]>([]);
 
-  // Check if already approved
+  // Load existing data from persistence on mount
   useEffect(() => {
+    if (!currentSession) return;
+
     const approvedText = getApprovedText(config.questionType);
     if (approvedText) {
       setPhase("approved");
+      return;
     }
-  }, [config.questionType, getApprovedText]);
+
+    // Load saved analysis (themes)
+    const savedAnalysis = persistence.getAnalysis(currentSession.id, config.questionType);
+    if (savedAnalysis && savedAnalysis.themes.length > 0) {
+      setThemes(savedAnalysis.themes);
+
+      // Load saved proposals
+      const savedProposals = persistence.getProposals(currentSession.id, config.questionType);
+      if (savedProposals.length > 0 && savedProposals[0].variants.length > 0) {
+        setProposals(savedProposals[0].variants);
+        setRecommendation(savedProposals[0].status === "voting" ? "gebalanceerd" : null);
+        setPhase("voting");
+      } else {
+        setPhase("themes");
+      }
+    }
+  }, [currentSession, config.questionType, getApprovedText]);
 
   // Get responses for this question
   const responses = documents
@@ -93,7 +183,20 @@ export function VisieStep({ subStep, onComplete }: VisieStepProps) {
       }
 
       const result = await response.json();
-      setThemes(result.themes || []);
+      const newThemes = result.themes || [];
+      setThemes(newThemes);
+
+      // Save analysis to persistence
+      if (currentSession && newThemes.length > 0) {
+        persistence.saveAnalysis(currentSession.id, {
+          questionType: config.questionType,
+          analyzedAt: new Date(),
+          themes: newThemes,
+          quickWins: result.quickWins || [],
+          discussionPoints: result.discussionPoints || []
+        });
+      }
+
       setPhase("themes");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Onbekende fout");
@@ -113,9 +216,17 @@ export function VisieStep({ subStep, onComplete }: VisieStepProps) {
     setThemes((prev) => prev.filter((t) => t.id !== themeId));
   };
 
-  const handleGenerateProposals = async () => {
+  const handleAddTheme = (newTheme: ThemeCluster) => {
+    setThemes((prev) => [...prev, newTheme]);
+  };
+
+  const handleGenerateProposals = async (themesToUse?: ThemeCluster[]) => {
+    setPhase("analyzing");
     setIsLoading(true);
     setError(null);
+
+    // Use provided themes or fall back to state
+    const themesForApi = themesToUse || themes;
 
     try {
       const response = await fetch("/api/generate-proposals", {
@@ -123,7 +234,7 @@ export function VisieStep({ subStep, onComplete }: VisieStepProps) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           questionType: config.questionType,
-          themes,
+          themes: themesForApi,
           originalResponses: responses
         })
       });
@@ -133,8 +244,19 @@ export function VisieStep({ subStep, onComplete }: VisieStepProps) {
       }
 
       const result = await response.json();
-      setProposals(result.variants || []);
+      const newProposals = result.variants || [];
+      setProposals(newProposals);
       setRecommendation(result.recommendation || null);
+
+      // Save proposals to persistence
+      if (currentSession && newProposals.length > 0) {
+        persistence.saveProposal(currentSession.id, {
+          questionType: config.questionType,
+          variants: newProposals,
+          status: "voting",
+          createdAt: new Date()
+        });
+      }
 
       // Pre-select recommended variant
       const recommendedVariant = result.variants?.find(
@@ -147,6 +269,7 @@ export function VisieStep({ subStep, onComplete }: VisieStepProps) {
       setPhase("voting");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Onbekende fout");
+      setPhase("voting_results");
     } finally {
       setIsLoading(false);
     }
@@ -165,7 +288,26 @@ export function VisieStep({ subStep, onComplete }: VisieStepProps) {
     if (!variant) return;
 
     saveApprovedText(config.questionType, variant.text, "proposal-1", variant.id);
+
+    // Update flow state to mark the visie substep as approved
+    const visieSubStepMap: Record<string, "huidige" | "gewenste" | "beweging" | "stakeholders"> = {
+      visie_huidige: "huidige",
+      visie_gewenste: "gewenste",
+      visie_beweging: "beweging",
+      visie_stakeholders: "stakeholders"
+    };
+    const visieKey = visieSubStepMap[subStep];
+    if (visieKey) {
+      updateFlowState({
+        visie: {
+          ...flowState.visie,
+          [visieKey]: { ...flowState.visie[visieKey], status: "approved" }
+        }
+      });
+    }
+
     setPhase("approved");
+    showToast(`${config.title} succesvol vastgesteld!`, "success");
     onComplete();
   };
 
@@ -181,16 +323,60 @@ export function VisieStep({ subStep, onComplete }: VisieStepProps) {
           </h1>
           <p className="text-gray-600">{config.description}</p>
 
+          {/* Visie steps navigation */}
+          {onNavigateToStep && (
+            <div className="mt-4 p-3 bg-gray-50 rounded-lg">
+              <p className="text-xs text-gray-500 mb-2">Visie onderdelen:</p>
+              <div className="flex flex-wrap gap-2">
+                {([
+                  { step: "visie_huidige", label: "A. Huidige situatie", questionType: "current_situation" as QuestionType },
+                  { step: "visie_gewenste", label: "B. Gewenste situatie", questionType: "desired_situation" as QuestionType },
+                  { step: "visie_beweging", label: "C. Beweging", questionType: "change_direction" as QuestionType },
+                  { step: "visie_stakeholders", label: "D. Belanghebbenden", questionType: "stakeholders" as QuestionType },
+                  { step: "visie_samenvatting", label: "Samenvatting", questionType: null }
+                ] as const).map((item) => {
+                  const isCurrent = item.step === subStep;
+                  const isCompleted = item.questionType ? !!getApprovedText(item.questionType) : false;
+                  const isSummary = item.step === "visie_samenvatting";
+
+                  return (
+                    <button
+                      key={item.step}
+                      onClick={() => !isCurrent && onNavigateToStep(item.step)}
+                      disabled={isCurrent}
+                      className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-1.5 ${
+                        isCurrent
+                          ? "bg-cito-blue text-white cursor-default"
+                          : isCompleted
+                          ? "bg-green-100 text-green-800 hover:bg-green-200 border border-green-300"
+                          : isSummary
+                          ? "bg-purple-100 text-purple-800 hover:bg-purple-200 border border-purple-300"
+                          : "bg-white text-gray-600 hover:bg-gray-100 border border-gray-300"
+                      }`}
+                    >
+                      {isCompleted && !isCurrent && (
+                        <svg className="w-3.5 h-3.5" fill="currentColor" viewBox="0 0 20 20">
+                          <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                        </svg>
+                      )}
+                      {item.label}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           {/* Phase indicator */}
           <div className="mt-4 flex items-center gap-2">
-            {["overview", "themes", "voting", "approved"].map((p, index) => (
+            {["overview", "themes", "theme_voting", "voting", "approved"].map((p, index) => (
               <div key={p} className="flex items-center">
                 {index > 0 && <div className="w-8 h-0.5 bg-gray-300 mx-1" />}
                 <div
                   className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
                     phase === p
                       ? "bg-cito-blue text-white"
-                      : ["overview", "themes", "voting", "approved"].indexOf(phase) >
+                      : ["overview", "themes", "theme_voting", "voting", "approved"].indexOf(phase) >
                         index
                       ? "bg-cito-green text-white"
                       : "bg-gray-200 text-gray-500"
@@ -292,16 +478,34 @@ export function VisieStep({ subStep, onComplete }: VisieStepProps) {
           </div>
         )}
 
-        {/* Phase: Analyzing */}
+        {/* Phase: Analyzing - Loading Screen */}
         {phase === "analyzing" && (
-          <div className="card text-center py-12">
-            <div className="spinner mx-auto mb-4" />
-            <p className="text-gray-600 text-lg">
-              AI analyseert de antwoorden...
+          <div className="card text-center py-16 animate-fade-in">
+            <div className="relative mx-auto w-20 h-20 mb-6">
+              <div className="absolute inset-0 rounded-full border-4 border-cito-light-blue"></div>
+              <div className="absolute inset-0 rounded-full border-4 border-cito-blue border-t-transparent animate-spin"></div>
+              <div className="absolute inset-2 rounded-full bg-cito-light-blue flex items-center justify-center">
+                <svg className="w-8 h-8 text-cito-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                </svg>
+              </div>
+            </div>
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">
+              AI is bezig met analyseren...
+            </h3>
+            <p className="text-gray-600 text-lg mb-2">
+              {proposals.length === 0
+                ? "Zoekt naar overeenkomsten, verschillen en thema's"
+                : "Genereert formuleringen op basis van de thema's"}
             </p>
-            <p className="text-gray-500 text-sm mt-2">
-              Zoekt naar overeenkomsten, verschillen en thema's
+            <p className="text-gray-500 text-sm">
+              Dit kan enkele seconden duren
             </p>
+            <div className="mt-6 flex justify-center gap-1">
+              <div className="w-2 h-2 bg-cito-blue rounded-full animate-bounce" style={{ animationDelay: "0ms" }}></div>
+              <div className="w-2 h-2 bg-cito-blue rounded-full animate-bounce" style={{ animationDelay: "150ms" }}></div>
+              <div className="w-2 h-2 bg-cito-blue rounded-full animate-bounce" style={{ animationDelay: "300ms" }}></div>
+            </div>
           </div>
         )}
 
@@ -322,6 +526,7 @@ export function VisieStep({ subStep, onComplete }: VisieStepProps) {
                 themes={themes}
                 onUpdateTheme={handleUpdateTheme}
                 onDeleteTheme={handleDeleteTheme}
+                onAddTheme={handleAddTheme}
                 editable
                 showQuickWins
               />
@@ -335,23 +540,240 @@ export function VisieStep({ subStep, onComplete }: VisieStepProps) {
                 Terug naar overzicht
               </button>
               <button
-                onClick={handleGenerateProposals}
-                disabled={isLoading || themes.length === 0}
+                onClick={() => setPhase("theme_voting")}
+                disabled={themes.length === 0}
                 className="btn btn-primary flex items-center gap-2 disabled:opacity-50"
               >
-                {isLoading ? (
-                  <>
-                    <span className="spinner" />
-                    Genereren...
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
-                    </svg>
-                    Genereer formuleringen
-                  </>
-                )}
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                Punten geven aan thema's
+              </button>
+            </div>
+          </div>
+        )}
+
+
+        {/* Phase: Theme Voting */}
+        {phase === "theme_voting" && (
+          <div className="space-y-6">
+            <div className="card">
+              <h2 className="text-lg font-semibold text-gray-900 mb-2">
+                Geef punten aan thema's
+              </h2>
+              <p className="text-gray-600 mb-4">
+                Verdeel 3 punten over de thema's die jij het belangrijkst vindt.
+                Op basis van deze ranking wordt de formulering gegenereerd.
+              </p>
+
+              <ThemeVoting
+                themes={themes}
+                maxVotesPerPerson={3}
+                onVotesComplete={(voted) => {
+                  setVotedThemes(voted);
+                  // Show voting results phase
+                  setPhase("voting_results");
+                }}
+              />
+            </div>
+
+            <div className="flex justify-start">
+              <button
+                onClick={() => setPhase("themes")}
+                className="btn btn-secondary"
+              >
+                Terug naar thema's
+              </button>
+            </div>
+          </div>
+        )}
+
+        {/* Phase: Voting Results */}
+        {phase === "voting_results" && votedThemes.length > 0 && (
+          <div className="space-y-6 animate-fade-in">
+            {/* Results header */}
+            <div className="card bg-green-50 border-green-200">
+              <div className="flex items-center gap-3 mb-4">
+                <div className="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center">
+                  <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                  </svg>
+                </div>
+                <div>
+                  <h2 className="text-xl font-semibold text-green-800">Stemresultaten</h2>
+                  <p className="text-green-700">Hieronder zie je de ranking op basis van de gegeven punten</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Results list */}
+            <div className="space-y-3">
+              {votedThemes.map((theme, index) => {
+                const maxVotes = Math.max(...votedThemes.map(t => t.votes), 1);
+                const percentage = (theme.votes / maxVotes) * 100;
+
+                return (
+                  <div
+                    key={theme.id}
+                    className={`card animate-slide-in-up stagger-${Math.min(index + 1, 5)} ${
+                      index === 0 ? "border-2 border-cito-blue bg-cito-light-blue" : ""
+                    }`}
+                  >
+                    <div className="flex items-center gap-4">
+                      {/* Rank badge */}
+                      <div className={`w-12 h-12 rounded-full flex items-center justify-center font-bold text-lg ${
+                        index === 0
+                          ? "bg-yellow-500 text-white"
+                          : index === 1
+                          ? "bg-gray-400 text-white"
+                          : index === 2
+                          ? "bg-orange-600 text-white"
+                          : "bg-gray-200 text-gray-600"
+                      }`}>
+                        #{index + 1}
+                      </div>
+
+                      {/* Content */}
+                      <div className="flex-1">
+                        <h3 className="font-semibold text-gray-900">{theme.name}</h3>
+                        <p className="text-sm text-gray-600">{theme.description}</p>
+                        {theme.votedBy.length > 0 && (
+                          <p className="text-xs text-gray-500 mt-1">
+                            Gestemd door: {theme.votedBy.join(", ")}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Vote bar */}
+                      <div className="w-32">
+                        <div className="flex items-center gap-2">
+                          <div className="flex-1 h-3 bg-gray-200 rounded-full overflow-hidden">
+                            <div
+                              className="h-full bg-cito-blue rounded-full vote-bar"
+                              style={{ width: `${percentage}%` }}
+                            />
+                          </div>
+                          <span className="text-lg font-bold text-cito-blue w-8 text-right">
+                            {theme.votes}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            {/* Themes with votes summary - Editable */}
+            <div className="card bg-cito-light-blue">
+              <div className="flex items-center justify-between mb-3">
+                <h3 className="font-semibold text-cito-blue">
+                  Geselecteerde thema's voor formulering
+                </h3>
+                <span className="text-xs text-gray-500">
+                  Klik op X om te verwijderen, of voeg een thema toe
+                </span>
+              </div>
+              <p className="text-gray-700 mb-4">
+                De AI zal een formulering genereren gebaseerd op onderstaande thema's. Je kunt nog aanpassen:
+              </p>
+              <div className="flex flex-wrap gap-2 mb-4">
+                {votedThemes.filter(t => t.votes > 0).map((theme) => (
+                  <span
+                    key={theme.id}
+                    className="px-3 py-1 bg-white rounded-full text-sm font-medium text-cito-blue shadow-sm flex items-center gap-2 group"
+                  >
+                    {theme.name} ({theme.votes} pt)
+                    <button
+                      onClick={() => {
+                        setVotedThemes(prev => prev.map(t =>
+                          t.id === theme.id ? { ...t, votes: 0 } : t
+                        ));
+                      }}
+                      className="w-4 h-4 rounded-full bg-gray-200 hover:bg-red-500 hover:text-white text-gray-500 flex items-center justify-center text-xs transition-colors"
+                      title="Verwijderen uit selectie"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+
+              {/* Add theme from non-selected */}
+              {votedThemes.filter(t => t.votes === 0).length > 0 && (
+                <div className="border-t border-cito-blue/20 pt-4">
+                  <p className="text-sm text-gray-600 mb-2">Thema toevoegen aan selectie:</p>
+                  <div className="flex flex-wrap gap-2">
+                    {votedThemes.filter(t => t.votes === 0).map((theme) => (
+                      <button
+                        key={theme.id}
+                        onClick={() => {
+                          setVotedThemes(prev => prev.map(t =>
+                            t.id === theme.id ? { ...t, votes: 1 } : t
+                          ));
+                        }}
+                        className="px-3 py-1 bg-white/50 border border-dashed border-cito-blue/50 rounded-full text-sm text-gray-600 hover:bg-white hover:border-solid hover:text-cito-blue transition-all flex items-center gap-1"
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                        </svg>
+                        {theme.name}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Manual add */}
+              <div className="border-t border-cito-blue/20 pt-4 mt-4">
+                <AddManualThemeInline
+                  onAdd={(name) => {
+                    const newTheme: ThemeWithVotes = {
+                      id: `manual-${Date.now()}`,
+                      name,
+                      description: name,
+                      questionType: config.questionType,
+                      relatedResponses: [],
+                      mentionedBy: ["Handmatig"],
+                      consensusLevel: "medium",
+                      aiConfidence: 1.0,
+                      exampleQuotes: [],
+                      votes: 1,
+                      votedBy: ["Handmatig"],
+                      voteDetails: {}
+                    };
+                    setVotedThemes(prev => [...prev, newTheme]);
+                  }}
+                />
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex justify-between">
+              <button
+                onClick={() => setPhase("theme_voting")}
+                className="btn btn-secondary"
+              >
+                Opnieuw stemmen
+              </button>
+              <button
+                onClick={() => {
+                  // Use only themes with votes for proposal generation
+                  const rankedThemes = votedThemes.filter(t => t.votes > 0);
+                  if (rankedThemes.length > 0) {
+                    setThemes(rankedThemes);
+                    // Pass themes directly to avoid race condition with setState
+                    handleGenerateProposals(rankedThemes);
+                  } else {
+                    handleGenerateProposals();
+                  }
+                }}
+                className="btn btn-primary flex items-center gap-2"
+              >
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                Genereer formuleringen met AI
               </button>
             </div>
           </div>
@@ -378,6 +800,7 @@ export function VisieStep({ subStep, onComplete }: VisieStepProps) {
                     onSelect={() => setSelectedVariant(variant.id)}
                     editable
                     onEdit={(text) => handleEditProposal(variant.id, text)}
+                    contextLabel={config.title}
                   />
                 ))}
               </div>

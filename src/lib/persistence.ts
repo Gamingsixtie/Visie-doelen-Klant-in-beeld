@@ -28,7 +28,8 @@ const STORAGE_KEYS = {
   VOTES: "kib_votes",
   APPROVED_TEXTS: "kib_approved_texts",
   FINAL_DOCUMENTS: "kib_final_documents",
-  FLOW_STATES: "kib_flow_states"
+  FLOW_STATES: "kib_flow_states",
+  GENERATED_VISION: "kib_generated_vision"
 };
 
 // === HELPER FUNCTIONS ===
@@ -510,4 +511,46 @@ export function exportSessionData(sessionId: string): FullSessionExport | null {
     finalDocument: getFinalDocument(sessionId),
     flowState: getFlowState(sessionId)
   };
+}
+
+// === GENERATED VISION ===
+
+export interface StoredGeneratedVision {
+  sessionId: string;
+  uitgebreid: string;
+  beknopt: string;
+  generatedAt: Date;
+}
+
+export function saveGeneratedVision(
+  sessionId: string,
+  uitgebreid: string,
+  beknopt: string
+): StoredGeneratedVision {
+  const vision: StoredGeneratedVision = {
+    sessionId,
+    uitgebreid,
+    beknopt,
+    generatedAt: new Date()
+  };
+
+  const visions = getFromStorage<StoredGeneratedVision>(STORAGE_KEYS.GENERATED_VISION);
+  // Replace existing for same session
+  const filtered = visions.filter((v) => v.sessionId !== sessionId);
+  filtered.push(vision);
+  setInStorage(STORAGE_KEYS.GENERATED_VISION, filtered);
+
+  return vision;
+}
+
+export function getGeneratedVision(sessionId: string): StoredGeneratedVision | null {
+  const visions = getFromStorage<StoredGeneratedVision>(STORAGE_KEYS.GENERATED_VISION);
+  const vision = visions.find((v) => v.sessionId === sessionId);
+  if (vision) {
+    return {
+      ...vision,
+      generatedAt: parseDate(vision.generatedAt)
+    };
+  }
+  return null;
 }

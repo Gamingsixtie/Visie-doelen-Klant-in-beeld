@@ -6,6 +6,7 @@ import { useSession } from "@/lib/session-context";
 import { SessionHeader, ProgressIndicator, StepNavigation } from "@/components/layout";
 import { UploadStep } from "@/components/steps/UploadStep";
 import { VisieStep } from "@/components/steps/VisieStep";
+import { VisieSummaryStep } from "@/components/steps/VisieSummaryStep";
 import { DoelenStep } from "@/components/steps/DoelenStep";
 import { ScopeStep } from "@/components/steps/ScopeStep";
 import { ExportStep } from "@/components/steps/ExportStep";
@@ -58,6 +59,7 @@ export default function SessionPage() {
       "visie_gewenste",
       "visie_beweging",
       "visie_stakeholders",
+      "visie_samenvatting",
       "doelen",
       "scope",
       "export"
@@ -93,8 +95,17 @@ export default function SessionPage() {
       case "visie_stakeholders":
         return (
           <VisieStep
+            key={flowState.currentStep}
             subStep={flowState.currentStep}
             onComplete={handleStepComplete}
+            onNavigateToStep={(step) => setCurrentStep(step)}
+          />
+        );
+      case "visie_samenvatting":
+        return (
+          <VisieSummaryStep
+            onComplete={handleStepComplete}
+            onNavigateToStep={(step) => setCurrentStep(step)}
           />
         );
       case "doelen":

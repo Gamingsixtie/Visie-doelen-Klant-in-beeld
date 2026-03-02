@@ -182,3 +182,229 @@ body {
 .spinner {
   @apply animate-spin h-5 w-5 border-2 border-cito-blue border-t-transparent rounded-full;
 }
+
+/* ====== UX IMPROVEMENTS ====== */
+
+/* Better focus states for accessibility */
+*:focus-visible {
+  @apply outline-none ring-2 ring-cito-blue ring-offset-2;
+}
+
+button:focus-visible,
+a:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  @apply outline-none ring-2 ring-cito-blue ring-offset-2;
+}
+
+/* Smooth transitions for interactive elements */
+button,
+a,
+input,
+textarea,
+select {
+  @apply transition-all duration-200;
+}
+
+/* Animations */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideInUp {
+  from {
+    opacity: 0;
+    transform: translateY(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes pulse-soft {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.7;
+  }
+}
+
+@keyframes scale-in {
+  from {
+    opacity: 0;
+    transform: scale(0.95);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease-out forwards;
+}
+
+.animate-slide-in-right {
+  animation: slideInRight 0.3s ease-out forwards;
+}
+
+.animate-slide-in-up {
+  animation: slideInUp 0.3s ease-out forwards;
+}
+
+.animate-pulse-soft {
+  animation: pulse-soft 2s infinite;
+}
+
+.animate-scale-in {
+  animation: scale-in 0.2s ease-out forwards;
+}
+
+/* Staggered animation delays */
+.stagger-1 { animation-delay: 0.1s; }
+.stagger-2 { animation-delay: 0.2s; }
+.stagger-3 { animation-delay: 0.3s; }
+.stagger-4 { animation-delay: 0.4s; }
+.stagger-5 { animation-delay: 0.5s; }
+
+/* Button hover effects */
+.btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06);
+}
+
+.btn:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.btn:disabled {
+  @apply opacity-50 cursor-not-allowed;
+}
+
+/* Card hover effects */
+.card-interactive {
+  @apply card transition-all duration-200 cursor-pointer;
+}
+
+.card-interactive:hover {
+  @apply shadow-md border-cito-blue/30;
+  transform: translateY(-2px);
+}
+
+.card-interactive:active {
+  transform: translateY(0);
+}
+
+/* Input focus improvements */
+input:focus,
+textarea:focus,
+select:focus {
+  @apply border-cito-blue ring-2 ring-cito-light-blue;
+}
+
+/* Selection highlight */
+::selection {
+  background-color: var(--cito-light-blue);
+  color: var(--cito-blue);
+}
+
+/* Badge with pulse for notifications */
+.badge-pulse {
+  position: relative;
+}
+
+.badge-pulse::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  animation: pulse-soft 2s infinite;
+  background: inherit;
+  z-index: -1;
+}
+
+/* Skip link for accessibility */
+.skip-link {
+  @apply absolute -top-10 left-0 bg-cito-blue text-white px-4 py-2 z-50 transition-all;
+}
+
+.skip-link:focus {
+  @apply top-0;
+}
+
+/* Loading overlay */
+.loading-overlay {
+  @apply fixed inset-0 bg-white/80 flex items-center justify-center z-40;
+  backdrop-filter: blur(4px);
+}
+
+/* Success checkmark animation */
+@keyframes check-stroke {
+  100% {
+    stroke-dashoffset: 0;
+  }
+}
+
+.success-checkmark {
+  stroke-dasharray: 50;
+  stroke-dashoffset: 50;
+  animation: check-stroke 0.5s ease-out forwards;
+  animation-delay: 0.2s;
+}
+
+/* Voting results bar animation */
+@keyframes grow-bar {
+  from {
+    width: 0;
+  }
+}
+
+.vote-bar {
+  animation: grow-bar 0.6s ease-out forwards;
+}
+
+/* Theme card selected state */
+.theme-card-selected {
+  @apply ring-2 ring-cito-blue ring-offset-2 border-cito-blue;
+}
+
+/* Better placeholder styling */
+::placeholder {
+  @apply text-gray-400;
+}
+
+/* Print styles */
+@media print {
+  .no-print {
+    display: none !important;
+  }
+
+  body {
+    @apply bg-white text-black;
+  }
+
+  .card {
+    @apply shadow-none border border-gray-300;
+  }
+}

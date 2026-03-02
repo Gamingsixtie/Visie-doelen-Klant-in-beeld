@@ -253,6 +253,7 @@ interface ThemeClusterListProps {
   themes: ThemeClusterType[];
   onUpdateTheme?: (theme: ThemeClusterType) => void;
   onDeleteTheme?: (themeId: string) => void;
+  onAddTheme?: (theme: ThemeClusterType) => void;
   editable?: boolean;
   showQuickWins?: boolean;
 }
@@ -261,11 +262,37 @@ export function ThemeClusterList({
   themes,
   onUpdateTheme,
   onDeleteTheme,
+  onAddTheme,
   editable = false,
   showQuickWins = true
 }: ThemeClusterListProps) {
+  const [showAddForm, setShowAddForm] = useState(false);
+  const [newThemeName, setNewThemeName] = useState("");
+  const [newThemeDescription, setNewThemeDescription] = useState("");
+
   const quickWins = themes.filter((t) => t.consensusLevel === "high");
   const discussionPoints = themes.filter((t) => t.consensusLevel !== "high");
+
+  const handleAddTheme = () => {
+    if (!newThemeName.trim() || !onAddTheme) return;
+
+    const newTheme: ThemeClusterType = {
+      id: `manual-${Date.now()}`,
+      name: newThemeName.trim(),
+      description: newThemeDescription.trim() || newThemeName.trim(),
+      questionType: themes[0]?.questionType || "current_situation",
+      relatedResponses: [],
+      mentionedBy: ["Handmatig toegevoegd"],
+      consensusLevel: "medium",
+      aiConfidence: 1.0,
+      exampleQuotes: []
+    };
+
+    onAddTheme(newTheme);
+    setNewThemeName("");
+    setNewThemeDescription("");
+    setShowAddForm(false);
+  };
 
   return (
     <div className="space-y-6">
@@ -337,6 +364,76 @@ export function ThemeClusterList({
         <p className="text-gray-500 text-center py-8">
           Geen thema's gevonden. Start de analyse om thema's te identificeren.
         </p>
+      )}
+
+      {/* Add Theme Button/Form */}
+      {editable && onAddTheme && (
+        <div className="mt-4 pt-4 border-t border-gray-200">
+          {showAddForm ? (
+            <div className="p-4 bg-gray-50 rounded-lg border-2 border-dashed border-gray-300">
+              <h4 className="font-medium text-gray-900 mb-3">Nieuw thema toevoegen</h4>
+              <div className="space-y-3">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Naam van het thema *
+                  </label>
+                  <input
+                    type="text"
+                    value={newThemeName}
+                    onChange={(e) => setNewThemeName(e.target.value)}
+                    placeholder="Bijv. Klantgerichtheid, Innovatie, etc."
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cito-blue"
+                    autoFocus
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Beschrijving (optioneel)
+                  </label>
+                  <textarea
+                    value={newThemeDescription}
+                    onChange={(e) => setNewThemeDescription(e.target.value)}
+                    placeholder="Korte toelichting van dit thema..."
+                    rows={2}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-cito-blue resize-none"
+                  />
+                </div>
+                <div className="flex gap-2">
+                  <button
+                    onClick={handleAddTheme}
+                    disabled={!newThemeName.trim()}
+                    className="px-4 py-2 bg-cito-blue text-white rounded-lg hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                    </svg>
+                    Toevoegen
+                  </button>
+                  <button
+                    onClick={() => {
+                      setShowAddForm(false);
+                      setNewThemeName("");
+                      setNewThemeDescription("");
+                    }}
+                    className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+                  >
+                    Annuleren
+                  </button>
+                </div>
+              </div>
+            </div>
+          ) : (
+            <button
+              onClick={() => setShowAddForm(true)}
+              className="w-full py-3 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-cito-blue hover:text-cito-blue transition-colors flex items-center justify-center gap-2"
+            >
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              Thema handmatig toevoegen
+            </button>
+          )}
+        </div>
       )}
     </div>
   );

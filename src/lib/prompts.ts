@@ -2,8 +2,91 @@
 // AI PROMPTS FOR CONSOLIDATIE APP
 // ============================================
 
+// Cito BV Achtergrondinformatie - wordt gebruikt in alle AI prompts
+export const CITO_CONTEXT = `
+ACHTERGRONDINFORMATIE CITO BV:
+In Cito BV voeren we maatschappelijke marktactiviteiten uit. Het grootste deel van onze producten en diensten is gericht op Nederlandse onderwijsinstellingen. Cito BV werkt met drie sectoren: PO, VO en Professionals.
+
+SECTOR PO (Primair Onderwijs):
+- Leerlingvolgsysteem voor het primair en speciaal onderwijs
+- Leerling in beeld - doorstroomtoets
+- Toetsen voor kernvakken (taal, rekenen)
+- Observatie-instrumenten voor sociaal-emotionele ontwikkeling en motoriek
+- Aangepaste versies voor speciale leerlingen
+
+SECTOR VO (Voortgezet Onderwijs):
+- Volgsystemen vo en vso/pro voor de onderbouw
+- Schoolexamens voor de bovenbouw
+- Kijk- en luistertoetsen voor talen (meest bekend)
+
+SECTOR PROFESSIONALS:
+Bedient opdrachtgevers uit:
+- Bedrijfsleven en overheid
+- Middelbaar beroepsonderwijs (mbo)
+- Hoger onderwijs
+- Internationale opdrachtgevers
+
+Opdrachten binnen Professionals:
+- Beroepsonderwijs: vakbekwaamheidsexamens, certificeringstrajecten, pabo toelatingstoetsen
+- Nederlands als tweede taal (Nt2): taaltoetsen, naturalisatie- en inburgeringsexamens
+- Zakelijke markt (Cito Zakelijk)
+
+PROGRAMMA KLANT IN BEELD:
+
+DOELBEELD VAN HET PROGRAMMA:
+"Cito BV ontwikkelt zich tot een organisatie die vanuit een outside-in perspectief werkt, waarin mens, proces en systeem verbonden zijn en dit onderdeel wordt van de cultuur, zodat dienstverlening en samenwerking blijvend aansluiten bij de behoeften van klanten."
+
+VIER DOMEINEN VAN HET PROGRAMMA:
+1. MENS - Vaardigheden ontwikkelen voor outside-in werken. Heldere rollen en verantwoordelijkheden. Ruimte voor oefenen en reflectie.
+2. PROCES - Organisatiebreed uniform klantproces. Eenduidige opvolging van klantinzichten. Borging in standaard werkwijze.
+3. SYSTEEM - Verbetering CRM en klantdata. Integraal 360° klantbeeld. Systemen die proactief handelen ondersteunen.
+4. CULTUUR - Van productgericht naar klantgericht. Gedeeld eigenaarschap voor klantrelaties. Sectoroverstijgende samenwerking.
+
+BEOOGDE BATEN:
+- Hogere klanttevredenheid (NPS-score, klantfeedback)
+- Lagere ongewenste klantuitstroom (churn, verlengingen)
+- Betere aansluiting op klantbehoefte (gebruik producten, minder klachten)
+- Proactieve klantrelaties (proactieve contactmomenten, eerder signaleren)
+- Efficiëntere interne samenwerking (kortere doorlooptijden, minder dubbel werk)
+- Betrouwbaar integraal klantbeeld (één klantview, betere datakwaliteit)
+
+BELANGRIJK - ALLE SECTOREN BETREKKEN:
+Het programma Klant in Beeld is een organisatiebreed programma dat relevant is voor ALLE drie de sectoren van Cito BV:
+- Sector PO: basisscholen, speciaal onderwijs
+- Sector VO: middelbare scholen, vso/pro
+- Sector Professionals (Zakelijk): bedrijfsleven, overheid, mbo, hoger onderwijs, internationale organisaties
+
+Elke sector heeft een baateigenaar (sectormanager) die verantwoordelijk is voor het realiseren van de baten.
+
+Schrijf sector-overstijgend: de beweging naar outside-in werken en klantpartnerschap geldt voor zowel scholen als zakelijke opdrachtgevers. Vermijd formuleringen die alleen op onderwijs gericht zijn.
+
+METHODIEK PROGRAMMAMANAGEMENT (Prevaas & Van Loon):
+Deze app volgt de methodiek uit "Werken aan programma's" voor het ontwikkelen van een gedragen visie.
+Een programmavisie bestaat uit vier elementen:
+1. HUIDIGE SITUATIE - Waar staan we nu? Wat is de aanleiding voor verandering?
+2. GEWENSTE SITUATIE - Waar willen we naartoe? Wat is het beoogde eindbeeld?
+3. BEWEGING - Welke verandering is nodig om van huidig naar gewenst te komen?
+4. BELANGHEBBENDEN - Voor wie is deze verandering relevant?
+
+Kenmerken van een goede programmavisie:
+- Aansprekend en inspirerend
+- Richtinggevend zonder te gedetailleerd te zijn
+- Gedragen door de betrokkenen (MT)
+- Maakt de beweging concreet
+- Verbindt de belanghebbenden
+
+Principes uit de methodiek:
+- Sturen vanuit visie en doelen boven sturen op inspanningen
+- Eigenaarschap aanboren boven opdrachten geven
+- Belangen verbinden boven belangen vertegenwoordigen
+- Expliciet maken boven impliciet laten
+- Werken met het doel voor ogen
+`;
+
 export const PARSE_CANVAS_PROMPT = `
 Je bent een expert in het extraheren van informatie uit ingevulde formulieren.
+
+${CITO_CONTEXT}
 
 Analyseer het volgende document (een ingevuld MT-canvas voor het programma Klant in Beeld) en extraheer de antwoorden.
 
@@ -39,6 +122,8 @@ DOCUMENT:
 
 export const ANALYZE_THEMES_PROMPT = `
 Je bent een expert in het analyseren van kwalitatieve data en het identificeren van patronen.
+
+${CITO_CONTEXT}
 
 Hieronder staan de antwoorden van MT-leden op een vraag over hun visie/doelen voor het programma Klant in Beeld.
 
@@ -89,6 +174,8 @@ Zorg ervoor dat:
 
 export const GENERATE_PROPOSAL_PROMPT = `
 Je bent een expert in het formuleren van gedeelde doelstellingen voor organisaties.
+
+${CITO_CONTEXT}
 
 Context: Het programma "Klant in Beeld" bij Cito helpt de organisatie om vanuit een outside-in perspectief te werken en samen te werken als partner met klanten.
 
@@ -176,7 +263,8 @@ Structuur:
 Stijl:
 - Professioneel maar toegankelijk
 - Actief geschreven
-- Consistent met Cito-terminologie
+- Consistent met Cito BV-terminologie
+- Gebruik altijd "Cito BV" (niet alleen "Cito")
 - Geen herhaling
 
 Retourneer het document als markdown.
@@ -193,3 +281,64 @@ export const QUESTION_LABELS: Record<string, string> = {
   goals: "Doelen",
   out_of_scope: "Buiten scope"
 };
+
+export const ANALYZE_GOALS_PROMPT = `
+Je bent een expert in het analyseren van doelstellingen en het identificeren van patronen voor organisatieprogramma's.
+
+${CITO_CONTEXT}
+
+CONTEXT: Je analyseert de doelen die MT-leden hebben ingevuld voor het programma Klant in Beeld.
+Elk MT-lid heeft 3 doelen gegeven met prioriteiten:
+- Prioriteit 1 = Hoogste prioriteit (belangrijkst)
+- Prioriteit 2 = Tweede prioriteit
+- Prioriteit 3 = Derde prioriteit
+
+DOELEN VAN MT-LEDEN:
+{responses}
+
+OPDRACHT:
+Analyseer alle doelen en cluster ze naar thema/onderwerp. Let op:
+
+1. CLUSTER SOORTGELIJKE DOELEN: Groepeer doelen die over hetzelfde onderwerp gaan, ook als ze anders geformuleerd zijn.
+
+2. WEEG PRIORITEIT MEE: Doelen met prioriteit 1 zijn belangrijker dan prioriteit 3.
+
+3. MAAK CONCRETE CLUSTERS: Gebruik duidelijke, actieve namen die het doel beschrijven.
+
+4. KOPPEL RESPONDENTEN: Geef aan welke MT-leden dit doel noemden en met welke prioriteit.
+
+BELANGRIJK voor consensusLevel:
+- "high" = Genoemd door >50% van MT-leden OF meerdere leden geven dit prioriteit 1
+- "medium" = Genoemd door 25-50% van MT-leden
+- "low" = Genoemd door <25% van MT-leden
+
+Retourneer JSON in dit formaat:
+{
+  "themes": [
+    {
+      "id": "goal-cluster-1",
+      "name": "Actieve naam van het doelcluster (bijv. 'CRM verbeteren', 'Klantinzichten delen')",
+      "description": "Uitgebreide beschrijving van wat dit doel inhoudt, samengesteld uit de input",
+      "mentionedBy": ["namen van MT-leden die dit doel noemden"],
+      "consensusLevel": "high|medium|low",
+      "exampleQuotes": ["letterlijke citaten uit de doelen"],
+      "relatedResponses": ["respondent_ids"],
+      "averagePriority": 1.5,
+      "priorityBreakdown": {
+        "prio1": 2,
+        "prio2": 1,
+        "prio3": 0
+      }
+    }
+  ],
+  "quickWins": ["doelnamen met high consensus"],
+  "discussionPoints": ["doelnamen waar MT-leden verschillend over denken"]
+}
+
+Zorg voor:
+- Maximaal 7-8 clusters (groepeer vergelijkbare doelen)
+- Concrete, actieve formuleringen (niet vaag)
+- Duidelijke koppeling naar originele input
+- Accurate weergave van prioriteiten
+`;
+

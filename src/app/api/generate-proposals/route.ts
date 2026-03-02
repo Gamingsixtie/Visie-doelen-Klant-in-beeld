@@ -18,11 +18,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Format themes for the prompt
+    // Format themes for the prompt - include vote info if available
     const formattedThemes = (themes || [])
       .map(
-        (t: { name: string; description: string; consensusLevel: string }) =>
-          `- ${t.name}: ${t.description} (consensus: ${t.consensusLevel})`
+        (t: { name: string; description: string; consensusLevel: string; votes?: number; votedBy?: string[] }) => {
+          const voteInfo = t.votes !== undefined ? ` [${t.votes} punten]` : "";
+          const votersInfo = t.votedBy && t.votedBy.length > 0 ? ` (gestemd door: ${t.votedBy.join(", ")})` : "";
+          return `- ${t.name}${voteInfo}: ${t.description} (consensus: ${t.consensusLevel})${votersInfo}`;
+        }
       )
       .join("\n");
 

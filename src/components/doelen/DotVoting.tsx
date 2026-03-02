@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { GoalClusterType } from "./GoalCluster";
 
 interface DotVotingProps {
@@ -19,6 +19,11 @@ export function DotVoting({
   voterName = "Jij"
 }: DotVotingProps) {
   const [votes, setVotes] = useState<Record<string, number>>(currentVotes);
+
+  // Sync internal state when currentVotes prop changes (when switching voters)
+  useEffect(() => {
+    setVotes(currentVotes);
+  }, [currentVotes]);
 
   const usedDots = Object.values(votes).reduce((sum, v) => sum + v, 0);
   const remainingDots = totalDots - usedDots;
@@ -130,12 +135,14 @@ export function DotVoting({
                           : "bg-gray-100 text-gray-400 cursor-not-allowed"
                       }`}
                       title="Stem toevoegen"
+                      aria-label={`Stem toevoegen voor ${cluster.name}`}
                     >
                       <svg
                         className="w-5 h-5"
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
+                        aria-hidden="true"
                       >
                         <path
                           strokeLinecap="round"
@@ -154,12 +161,14 @@ export function DotVoting({
                           : "bg-gray-100 text-gray-400 cursor-not-allowed"
                       }`}
                       title="Stem verwijderen"
+                      aria-label={`Stem verwijderen voor ${cluster.name}`}
                     >
                       <svg
                         className="w-5 h-5"
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
+                        aria-hidden="true"
                       >
                         <path
                           strokeLinecap="round"

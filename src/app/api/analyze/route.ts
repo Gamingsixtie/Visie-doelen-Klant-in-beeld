@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import Anthropic from "@anthropic-ai/sdk";
-import { ANALYZE_THEMES_PROMPT, QUESTION_LABELS } from "@/lib/prompts";
+import { ANALYZE_THEMES_PROMPT, ANALYZE_GOALS_PROMPT, QUESTION_LABELS } from "@/lib/prompts";
 
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY
@@ -26,8 +26,12 @@ export async function POST(request: NextRequest) {
       )
       .join("\n\n---\n\n");
 
+    // Choose the right prompt based on question type
+    const isGoalsAnalysis = questionType === "goals";
+    const basePrompt = isGoalsAnalysis ? ANALYZE_GOALS_PROMPT : ANALYZE_THEMES_PROMPT;
+
     // Build the prompt
-    const prompt = ANALYZE_THEMES_PROMPT
+    const prompt = basePrompt
       .replace("{questionType}", QUESTION_LABELS[questionType] || questionType)
       .replace("{responses}", formattedResponses);
 

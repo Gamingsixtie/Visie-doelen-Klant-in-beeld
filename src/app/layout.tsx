@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { SessionProvider } from "@/lib/session-context";
+import { ToastProvider } from "@/components/ui";
 
 export const metadata: Metadata = {
   title: "Klant in Beeld - Consolidatie App",
@@ -22,9 +23,16 @@ export default function RootLayout({
       </head>
       <body className="antialiased">
         <SessionProvider>
-          <div className="min-h-screen flex flex-col">
-            {children}
-          </div>
+          <ToastProvider>
+            <a href="#main-content" className="skip-link">
+              Naar hoofdinhoud
+            </a>
+            <div className="min-h-screen flex flex-col">
+              <main id="main-content">
+                {children}
+              </main>
+            </div>
+          </ToastProvider>
         </SessionProvider>
       </body>
     </html>
