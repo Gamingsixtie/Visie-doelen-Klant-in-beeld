@@ -4,6 +4,7 @@ import { useState } from "react";
 import type { ProposalVariant, Vote, VoteValue } from "@/lib/types";
 import { VoteButtons } from "./VoteButtons";
 import { ConsentBadge } from "./ConsentStatus";
+import { RefineWithAI } from "@/components/ui/RefineWithAI";
 
 interface ProposalCardProps {
   variant: ProposalVariant;
@@ -214,6 +215,13 @@ export function ProposalCard({
                       </>
                     )}
                   </button>
+                )}
+                {editable && onEdit && (
+                  <RefineWithAI
+                    currentText={variant.text}
+                    context={contextLabel ? `Voorstel variant "${variant.type}" voor ${contextLabel}` : `Voorstel variant "${variant.type}"`}
+                    onRefined={(newText) => onEdit(newText)}
+                  />
                 )}
               </div>
             )}

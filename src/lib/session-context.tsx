@@ -11,6 +11,7 @@ import type {
 } from "./types";
 import { getInitialFlowState } from "./types";
 import * as persistence from "./persistence";
+import { useSaveStatus } from "./save-status-context";
 
 // === CONTEXT TYPE ===
 
@@ -42,6 +43,7 @@ interface SessionContextType {
   // Approved texts
   saveApprovedText: (questionType: QuestionType, text: string, proposalId: string, variantId: string) => void;
   getApprovedText: (questionType: QuestionType) => StoredApprovedText | null;
+  removeApprovedText: (questionType: QuestionType) => void;
 
   // Check for existing sessions
   existingSessions: StoredSession[];
@@ -63,6 +65,7 @@ export function SessionProvider({ children }: SessionProviderProps) {
   const [approvedTexts, setApprovedTexts] = useState<StoredApprovedText[]>([]);
   const [existingSessions, setExistingSessions] = useState<StoredSession[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const { triggerSave } = useSaveStatus();
 
   // Load existing sessions on mount
   useEffect(() => {
@@ -126,8 +129,9 @@ export function SessionProvider({ children }: SessionProviderProps) {
 
     const savedDoc = persistence.saveDocument(currentSession.id, doc);
     setDocuments((prev) => [...prev, savedDoc]);
+    triggerSave();
     return savedDoc;
-  }, [currentSession]);
+  }, [currentSession, triggerSave]);
 
   const removeDocument = useCallback((docId: string) => {
     persistence.deleteDocument(docId);
@@ -166,7 +170,8 @@ export function SessionProvider({ children }: SessionProviderProps) {
       persistence.saveFlowState(currentSession.id, newState);
       return newState;
     });
-  }, [currentSession]);
+    triggerSave();
+  }, [currentSession, triggerSave]);
 
   const setCurrentStep = useCallback((step: FlowStep) => {
     if (!currentSession) return;
@@ -221,6 +226,7 @@ export function SessionProvider({ children }: SessionProviderProps) {
         const filtered = prev.filter((t) => t.questionType !== questionType);
         return [...filtered, savedText];
       });
+      triggerSave();
     },
     [currentSession]
   );
@@ -230,6 +236,16 @@ export function SessionProvider({ children }: SessionProviderProps) {
       return approvedTexts.find((t) => t.questionType === questionType) || null;
     },
     [approvedTexts]
+  );
+
+  const removeApprovedTextFn = useCallback(
+    (questionType: QuestionType) => {
+      if (!currentSession) return;
+      persistence.deleteApprovedText(currentSession.id, questionType);
+      setApprovedTexts((prev) => prev.filter((t) => t.questionType !== questionType));
+      triggerSave();
+    },
+    [currentSession, triggerSave]
   );
 
   const value: SessionContextType = {
@@ -251,6 +267,7 @@ export function SessionProvider({ children }: SessionProviderProps) {
     unlockStep,
     saveApprovedText: saveApprovedTextFn,
     getApprovedText: getApprovedTextFn,
+    removeApprovedText: removeApprovedTextFn,
     existingSessions,
     refreshSessions
   };

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useSession } from "@/lib/session-context";
 import { useToast } from "@/components/ui";
+import { RefineWithAI } from "@/components/ui/RefineWithAI";
 import * as persistence from "@/lib/persistence";
 
 interface VisieSummaryStepProps {
@@ -461,6 +462,13 @@ export function VisieSummaryStep({ onComplete, onNavigateToStep }: VisieSummaryS
                       <div className="whitespace-pre-wrap text-gray-800 leading-relaxed prose prose-sm max-w-none">
                         {generatedVision.uitgebreid}
                       </div>
+                      <div className="mt-3">
+                        <RefineWithAI
+                          currentText={generatedVision.uitgebreid}
+                          context="Uitgebreide programmavisie Klant in Beeld"
+                          onRefined={(newText) => setGeneratedVision((prev) => prev ? { ...prev, uitgebreid: newText } : prev)}
+                        />
+                      </div>
                     </div>
                   ) : (
                     <div>
@@ -485,7 +493,14 @@ export function VisieSummaryStep({ onComplete, onNavigateToStep }: VisieSummaryS
                         </button>
                       </div>
                       <div className="text-gray-800 text-lg leading-relaxed font-medium italic">
-                        "{generatedVision.beknopt}"
+                        &ldquo;{generatedVision.beknopt}&rdquo;
+                      </div>
+                      <div className="mt-3">
+                        <RefineWithAI
+                          currentText={generatedVision.beknopt}
+                          context="Beknopte programmavisie Klant in Beeld (elevator pitch)"
+                          onRefined={(newText) => setGeneratedVision((prev) => prev ? { ...prev, beknopt: newText } : prev)}
+                        />
                       </div>
                     </div>
                   )}

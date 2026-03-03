@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from "react";
 import { useSession } from "@/lib/session-context";
-import { useToast } from "@/components/ui";
+import { useToast, ConfirmDialog } from "@/components/ui";
+import { RefineWithAI } from "@/components/ui/RefineWithAI";
 
 interface ScopeStepProps {
   onComplete: () => void;
@@ -15,22 +16,22 @@ interface ScopeItem {
 }
 
 export function ScopeStep({ onComplete }: ScopeStepProps) {
-  const { documents, getApprovedText, saveApprovedText, updateFlowState, flowState } = useSession();
+  const { documents, getApprovedText, saveApprovedText, removeApprovedText, updateFlowState, flowState } = useSession();
   const { showToast } = useToast();
   const [isApproved, setIsApproved] = useState(false);
   const [scopeItems, setScopeItems] = useState<ScopeItem[]>([]);
   const [newItemText, setNewItemText] = useState("");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editText, setEditText] = useState("");
+  const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
 
-  // Get approved goals for reference
+  // Get all approved goals for reference (3-5 doelen)
   const approvedGoals: string[] = [];
-  const goal1 = getApprovedText("goal_1");
-  const goal2 = getApprovedText("goal_2");
-  const goal3 = getApprovedText("goal_3");
-  if (goal1) approvedGoals.push(goal1.text);
-  if (goal2) approvedGoals.push(goal2.text);
-  if (goal3) approvedGoals.push(goal3.text);
+  const goalKeys = ["goal_1", "goal_2", "goal_3", "goal_4", "goal_5"] as const;
+  goalKeys.forEach((key) => {
+    const goal = getApprovedText(key);
+    if (goal) approvedGoals.push(goal.text);
+  });
 
   // Check if already approved
   useEffect(() => {
@@ -176,7 +177,20 @@ export function ScopeStep({ onComplete }: ScopeStepProps) {
               </div>
             </div>
 
-            <div className="flex justify-end">
+            <div className="flex justify-between">
+              <button
+                onClick={() => {
+                  removeApprovedText("out_of_scope");
+                  setIsApproved(false);
+                  showToast("Scope vrijgegeven voor bewerking", "info");
+                }}
+                className="btn btn-secondary flex items-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                </svg>
+                Bewerken
+              </button>
               <button onClick={onComplete} className="btn btn-primary flex items-center gap-2">
                 Naar export
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -266,6 +280,7 @@ export function ScopeStep({ onComplete }: ScopeStepProps) {
                           <button
                             onClick={handleEditSave}
                             className="px-3 py-2 bg-green-500 text-white rounded-lg hover:bg-green-600"
+                            aria-label="Wijziging opslaan"
                           >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
@@ -274,6 +289,7 @@ export function ScopeStep({ onComplete }: ScopeStepProps) {
                           <button
                             onClick={handleEditCancel}
                             className="px-3 py-2 bg-gray-300 text-gray-700 rounded-lg hover:bg-gray-400"
+                            aria-label="Wijziging annuleren"
                           >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -285,21 +301,35 @@ export function ScopeStep({ onComplete }: ScopeStepProps) {
                           <div className="flex-1">
                             <p className="text-gray-800">{item.text}</p>
                             <p className="text-xs text-gray-500 mt-1">Bron: {item.source}</p>
+                            <RefineWithAI
+                              currentText={item.text}
+                              context="Scope-afbakening: item dat buiten scope valt voor het programma Klant in Beeld"
+                              onRefined={(newText) => {
+                                setScopeItems(
+                                  scopeItems.map((si) =>
+                                    si.id === item.id ? { ...si, text: newText } : si
+                                  )
+                                );
+                              }}
+                              label="Verfijn formulering"
+                            />
                           </div>
                           <div className="flex gap-1">
                             <button
                               onClick={() => handleEditStart(item)}
                               className="p-2 text-gray-400 hover:text-cito-blue rounded transition-colors"
                               title="Bewerken"
+                              aria-label="Scope-item bewerken"
                             >
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                               </svg>
                             </button>
                             <button
-                              onClick={() => handleRemoveItem(item.id)}
+                              onClick={() => setDeleteConfirmId(item.id)}
                               className="p-2 text-gray-400 hover:text-red-500 rounded transition-colors"
                               title="Verwijderen"
+                              aria-label="Scope-item verwijderen"
                             >
                               <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -357,6 +387,19 @@ export function ScopeStep({ onComplete }: ScopeStepProps) {
             </div>
           </div>
         )}
+        {/* Delete confirmation dialog */}
+        <ConfirmDialog
+          isOpen={deleteConfirmId !== null}
+          title="Item verwijderen"
+          message="Weet je zeker dat je dit scope-item wilt verwijderen?"
+          confirmLabel="Verwijderen"
+          variant="danger"
+          onConfirm={() => {
+            if (deleteConfirmId) handleRemoveItem(deleteConfirmId);
+            setDeleteConfirmId(null);
+          }}
+          onCancel={() => setDeleteConfirmId(null)}
+        />
       </div>
     </div>
   );

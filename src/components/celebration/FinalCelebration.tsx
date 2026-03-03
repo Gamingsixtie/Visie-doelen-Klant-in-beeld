@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
+import { MT_MEMBERS } from "@/lib/types";
 
 interface Achievement {
   id: string;
@@ -12,14 +13,12 @@ interface FinalCelebrationProps {
   achievements: Achievement[];
   teamMembers?: string[];
   onClose: () => void;
-  sessionName?: string;
 }
 
 export function FinalCelebration({
   achievements,
   teamMembers = [],
-  onClose,
-  sessionName = "het MT"
+  onClose
 }: FinalCelebrationProps) {
   const [visibleAchievements, setVisibleAchievements] = useState<number>(0);
   const [showCredits, setShowCredits] = useState(false);
@@ -169,8 +168,11 @@ export function FinalCelebration({
           MISSIE VOLBRACHT!
         </h1>
 
-        <p className="text-xl text-blue-200 mb-10">
-          Gefeliciteerd {sessionName}
+        <p className="text-xl text-blue-200 mb-2">
+          Gefeliciteerd {MT_MEMBERS.slice(0, -1).join(", ")} en {MT_MEMBERS[MT_MEMBERS.length - 1]}!
+        </p>
+        <p className="text-lg text-blue-300/80 mb-10">
+          Jullie hebben het samen voor elkaar gekregen!
         </p>
 
         {/* Achievements */}

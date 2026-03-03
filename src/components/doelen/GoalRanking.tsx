@@ -178,6 +178,7 @@ export function GoalRanking({
                           : "text-gray-500 hover:bg-gray-100"
                       }`}
                       title="Omhoog"
+                      aria-label={`${cluster.name} omhoog verplaatsen`}
                     >
                       <svg
                         className="w-4 h-4"
@@ -204,6 +205,7 @@ export function GoalRanking({
                           : "text-gray-500 hover:bg-gray-100"
                       }`}
                       title="Omlaag"
+                      aria-label={`${cluster.name} omlaag verplaatsen`}
                     >
                       <svg
                         className="w-4 h-4"
@@ -242,6 +244,7 @@ export function GoalRanking({
                       onClick={() => handleRemoveFromRanking(cluster.id)}
                       className="p-2 text-red-500 hover:bg-red-50 rounded transition-colors"
                       title="Verwijderen"
+                      aria-label={`${cluster.name} verwijderen uit ranking`}
                     >
                       <svg
                         className="w-4 h-4"

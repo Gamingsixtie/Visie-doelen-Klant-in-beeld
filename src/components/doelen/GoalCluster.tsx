@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { RefineWithAI } from "@/components/ui/RefineWithAI";
 
 interface Goal {
   id: string;
@@ -102,6 +103,16 @@ export function GoalCluster({
                 </h3>
               )}
               <p className="text-gray-600 text-sm mt-1">{cluster.description}</p>
+              {editable && onEditName && !isEditing && (
+                <div className="mt-2" onClick={(e) => e.stopPropagation()}>
+                  <RefineWithAI
+                    currentText={cluster.name}
+                    context={`Doelcluster beschrijving: ${cluster.description}. Gebaseerd op ${cluster.goals.length} samengevoegde doelen van MT-leden.`}
+                    onRefined={(newName) => onEditName(newName)}
+                    label="Verfijn formulering"
+                  />
+                </div>
+              )}
             </div>
           </div>
 
@@ -158,6 +169,7 @@ export function GoalCluster({
                 }}
                 className="p-1 text-gray-400 hover:text-cito-blue rounded"
                 title="Naam bewerken"
+                aria-label="Doelnaam bewerken"
               >
                 <svg
                   className="w-4 h-4"

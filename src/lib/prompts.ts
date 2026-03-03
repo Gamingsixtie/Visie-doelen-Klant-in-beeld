@@ -132,15 +132,46 @@ VRAAG TYPE: {questionType}
 ANTWOORDEN:
 {responses}
 
-Analyseer deze antwoorden en identificeer:
+Analyseer deze antwoorden en identificeer de kernthema's.
 
-1. THEMA'S: Welke thema's/onderwerpen komen terug? Geef elk thema een korte naam en beschrijving.
+WAT IS EEN THEMA?
+Een thema is GEEN vaag trefwoord of categorie. Een thema is een krachtige, inhoudelijke stelling die de kern van wat MT-leden hebben gezegd samenvat. Het thema moet:
+- Een duidelijke RICHTING of POSITIE uitdrukken (niet neutraal beschrijvend)
+- Concreet en toetsbaar zijn (je kunt het er mee eens of oneens zijn)
+- De essentie vangen van wat respondenten daadwerkelijk bedoelen
+- Passen binnen de programma-methodiek "Werken aan programma's" (Prevaas & Van Loon)
+
+VOORBEELDEN:
+FOUT: "Klantgerichtheid" (te vaag, is slechts een trefwoord)
+GOED: "Van productgericht naar klantpartnerschap: Cito BV moet de omslag maken van aanbodgericht werken naar structureel samenwerken met klanten"
+
+FOUT: "CRM" (te abstract)
+GOED: "Eén integraal klantbeeld als fundament: alle klantinteracties moeten samenkomen in één betrouwbaar systeem dat proactief handelen mogelijk maakt"
+
+FOUT: "Samenwerking" (nietszeggend)
+GOED: "Sectoroverstijgend samenwerken aan klantrelaties: gezamenlijk eigenaarschap voor klantrelaties in plaats van silo-denken per sector"
+
+Identificeer per thema:
+
+1. THEMA'S: Formuleer elk thema als een krachtige stelling met een korte naam (max 5-6 woorden) en een uitgebreide beschrijving (2-3 zinnen) die de inhoudelijke kern helder uiteenzet.
 
 2. CONSENSUS: Welke thema's worden door meerdere respondenten genoemd?
 
 3. UNIEK: Welke perspectieven zijn uniek (slechts 1 respondent)?
 
 4. SPANNING: Zijn er tegenstrijdige perspectieven?
+
+BELANGRIJK - SECTOR-NEUTRAAL, WEL MET NAMEN:
+- Gebruik in "mentionedBy" de NAMEN van respondenten (bijv. "Roel", "Leontine"), zodat zichtbaar is wie wat heeft gezegd.
+- Verwijs NOOIT naar sectoren (PO, VO, Professionals, Zakelijk), afdelingen (Data & Tech, HR) of rollen in je analyse.
+- Citaten in "exampleQuotes" mogen GEEN sector- of rolnamen bevatten. Parafraseer indien nodig zodat het sector-neutraal is.
+- De analyse moet het beeld geven van Cito BV als GEHEEL, niet per sector of afdeling.
+- Formuleer thema's altijd sector-overstijgend.
+
+EENZIJDIGHEIDSCHECK:
+- Controleer na het opstellen van de thema's of het resultaat niet eenzijdig naar één sector leunt (bijv. alleen VO-gericht of alleen PO-gericht).
+- Als een antwoord sectorspecifieke taal bevat (bijv. "scholen in het voortgezet onderwijs"), vertaal dit naar een Cito BV-brede formulering (bijv. "onderwijsinstellingen en opdrachtgevers").
+- Het eindresultaat moet altijd herkenbaar en toepasbaar zijn voor ALLE sectoren van Cito BV, ongeacht de input.
 
 Retourneer JSON in dit formaat:
 {
@@ -149,9 +180,9 @@ Retourneer JSON in dit formaat:
       "id": "theme-1",
       "name": "Korte naam van het thema",
       "description": "Uitleg van het thema",
-      "mentionedBy": ["respondent_ids die dit noemen"],
+      "mentionedBy": ["Naam respondent 1", "Naam respondent 2"],
       "consensusLevel": "high|medium|low",
-      "exampleQuotes": ["citaten uit de antwoorden"],
+      "exampleQuotes": ["citaten zonder sector/rolnamen"],
       "relatedResponses": ["respondent_ids"]
     }
   ],
@@ -187,44 +218,27 @@ GEVONDEN THEMA'S:
 ORIGINELE ANTWOORDEN:
 {originalResponses}
 
-Maak 3 varianten van een gedeelde formulering:
-1. BEKNOPT: Kernachtig, max 2 zinnen
-2. VOLLEDIG: Alle nuances meegenomen, max 4 zinnen
-3. GEBALANCEERD: Midden tussen 1 en 2
-
-Elke variant moet:
-- Alle belangrijke elementen verwerken
+Formuleer EEN gebalanceerde, gedeelde formulering (2-3 zinnen). Deze formulering moet:
+- Kernachtig maar volledig zijn: alle belangrijke elementen verwerken zonder vaag te worden
 - Consistent zijn met Cito's terminologie (outside-in perspectief, partner, klantgericht)
 - Concreet en toetsbaar zijn (geen vage taal)
 - In actieve schrijfstijl
+- Sector-overstijgend geformuleerd zijn: NOOIT verwijzen naar individuele sectoren (PO, VO, Professionals, Zakelijk) of afdelingen
+- Het beeld geven van Cito BV als geheel
 
 Retourneer JSON:
 {
   "variants": [
     {
       "id": "variant-1",
-      "type": "beknopt",
-      "text": "De geformuleerde tekst",
-      "emphasizes": "Wat deze variant benadrukt",
-      "includesThemes": ["theme_names"]
-    },
-    {
-      "id": "variant-2",
-      "type": "volledig",
-      "text": "De geformuleerde tekst",
-      "emphasizes": "Wat deze variant benadrukt",
-      "includesThemes": ["theme_names"]
-    },
-    {
-      "id": "variant-3",
       "type": "gebalanceerd",
       "text": "De geformuleerde tekst",
-      "emphasizes": "Wat deze variant benadrukt",
+      "emphasizes": "Wat deze formulering benadrukt",
       "includesThemes": ["theme_names"]
     }
   ],
   "recommendation": "gebalanceerd",
-  "recommendationRationale": "Waarom deze variant wordt aanbevolen"
+  "recommendationRationale": "Toelichting op de gekozen formulering"
 }
 `;
 
@@ -246,9 +260,7 @@ VISIE - BELANGHEBBENDEN:
 {stakeholders}
 
 DOELEN:
-1. {goal1}
-2. {goal2}
-3. {goal3}
+{goals}
 
 SCOPE:
 Buiten scope: {outOfScope}
@@ -278,6 +290,8 @@ export const QUESTION_LABELS: Record<string, string> = {
   goal_1: "Doel 1",
   goal_2: "Doel 2",
   goal_3: "Doel 3",
+  goal_4: "Doel 4",
+  goal_5: "Doel 5",
   goals: "Doelen",
   out_of_scope: "Buiten scope"
 };
@@ -297,20 +311,62 @@ DOELEN VAN MT-LEDEN:
 {responses}
 
 OPDRACHT:
-Analyseer alle doelen en cluster ze naar thema/onderwerp. Let op:
+Analyseer alle doelen en cluster ze naar krachtige doelstellingen.
+
+WAT IS EEN GOED DOELCLUSTER?
+Een doelcluster is GEEN vaag trefwoord. Het is een helder geformuleerde doelstelling die:
+- Een concrete, toetsbare ambitie uitspreekt
+- Actief is geformuleerd (wat Cito BV gaat DOEN, niet wat er "moet")
+- De essentie van meerdere individuele doelen samenbrengt tot één krachtige stelling
+- Past bij de methodiek "Werken aan programma's" (Prevaas & Van Loon)
+
+METHODIEK "WERKEN AAN PROGRAMMA'S" - DOELSTELLINGEN:
+Volgens deze methodiek is een goede programmadoelstelling zo geformuleerd dat je er drie dingen uit kunt afleiden:
+1. GEWENSTE EFFECTEN: Welke meetbare resultaten/veranderingen wil Cito BV bereiken? (bijv. hogere klanttevredenheid, meer herhaalopdrachten)
+2. VERMOGENS: Welke capaciteiten en competenties heeft Cito BV nodig om dit doel te realiseren? (bijv. data-analyse vaardigheden, klantinzicht-competenties)
+3. INSPANNINGEN: Welke concrete activiteiten en acties zijn nodig? (bijv. CRM implementeren, klantreizen in kaart brengen)
+
+De doelstelling zelf hoeft deze drie elementen NIET expliciet te benoemen, maar moet ZO geformuleerd zijn dat:
+- Je er later gewenste effecten uit kunt afleiden (het doel beschrijft een toetsbare ambitie)
+- Je er vermogens bij kunt identificeren (het doel maakt duidelijk welke capaciteit nodig is)
+- Je er inspanningen uit kunt vertalen (het doel is concreet genoeg om acties aan te koppelen)
+- Het doel CITO-BREED is, maar ook als vertrekpunt kan dienen voor sector-specifieke gewenste effecten, vermogens en inspanningen
+
+VOORBEELD:
+FOUT: "CRM verbeteren" (te vaag - je kunt er geen effecten, vermogens of inspanningen uit afleiden)
+GOED: "Eén betrouwbaar klantbeeld realiseren: alle klantdata en -interacties samenbrengen in een integraal CRM-systeem dat proactief handelen ondersteunt"
+→ Hieruit volgen: effecten (betere klantinzichten), vermogens (data-integratie), inspanningen (CRM-implementatie)
+
+FOUT: "Beter samenwerken" (te vaag, niet toetsbaar)
+GOED: "Cross-sectoraal klantpartnerschap opbouwen: vanuit een gedeeld klantbeeld samen met klanten producten en diensten ontwikkelen die aansluiten op hun behoeften"
+→ Hieruit volgen: effecten (hogere klanttevredenheid), vermogens (co-creatie competenties), inspanningen (gezamenlijke ontwikkelsessies)
+
+Cluster de doelen:
 
 1. CLUSTER SOORTGELIJKE DOELEN: Groepeer doelen die over hetzelfde onderwerp gaan, ook als ze anders geformuleerd zijn.
 
 2. WEEG PRIORITEIT MEE: Doelen met prioriteit 1 zijn belangrijker dan prioriteit 3.
 
-3. MAAK CONCRETE CLUSTERS: Gebruik duidelijke, actieve namen die het doel beschrijven.
+3. FORMULEER KRACHTIG: Geef elk cluster een korte naam (max 5-6 woorden) en een uitgebreide beschrijving (2-3 zinnen) als concrete doelstelling.
 
-4. KOPPEL RESPONDENTEN: Geef aan welke MT-leden dit doel noemden en met welke prioriteit.
+4. KOPPEL RESPONDENTEN: Geef aan hoeveel respondenten dit doel noemden en met welke prioriteit.
+
+BELANGRIJK - SECTOR-NEUTRAAL, WEL MET NAMEN:
+- Gebruik in "mentionedBy" de NAMEN van respondenten (bijv. "Roel", "Leontine"), zodat zichtbaar is wie wat heeft gezegd.
+- Verwijs NOOIT naar sectoren (PO, VO, Professionals, Zakelijk), afdelingen (Data & Tech, HR) of rollen.
+- Citaten in "exampleQuotes" mogen GEEN sector- of rolnamen bevatten. Parafraseer indien nodig.
+- De analyse moet het beeld geven van Cito BV als GEHEEL, niet per sector of afdeling.
+- Formuleer doelclusters altijd sector-overstijgend.
+
+EENZIJDIGHEIDSCHECK:
+- Controleer na het opstellen van de doelclusters of het resultaat niet eenzijdig naar één sector leunt (bijv. alleen VO-gericht of alleen PO-gericht).
+- Als een doel sectorspecifieke taal bevat (bijv. "scholen in het voortgezet onderwijs"), vertaal dit naar een Cito BV-brede formulering (bijv. "onderwijsinstellingen en opdrachtgevers").
+- Het eindresultaat moet altijd herkenbaar en toepasbaar zijn voor ALLE sectoren van Cito BV, ongeacht de input.
 
 BELANGRIJK voor consensusLevel:
-- "high" = Genoemd door >50% van MT-leden OF meerdere leden geven dit prioriteit 1
-- "medium" = Genoemd door 25-50% van MT-leden
-- "low" = Genoemd door <25% van MT-leden
+- "high" = Genoemd door >50% van respondenten OF meerdere respondenten geven dit prioriteit 1
+- "medium" = Genoemd door 25-50% van respondenten
+- "low" = Genoemd door <25% van respondenten
 
 Retourneer JSON in dit formaat:
 {
@@ -319,9 +375,9 @@ Retourneer JSON in dit formaat:
       "id": "goal-cluster-1",
       "name": "Actieve naam van het doelcluster (bijv. 'CRM verbeteren', 'Klantinzichten delen')",
       "description": "Uitgebreide beschrijving van wat dit doel inhoudt, samengesteld uit de input",
-      "mentionedBy": ["namen van MT-leden die dit doel noemden"],
+      "mentionedBy": ["Naam respondent 1", "Naam respondent 2"],
       "consensusLevel": "high|medium|low",
-      "exampleQuotes": ["letterlijke citaten uit de doelen"],
+      "exampleQuotes": ["citaten zonder sector/rolnamen"],
       "relatedResponses": ["respondent_ids"],
       "averagePriority": 1.5,
       "priorityBreakdown": {
@@ -332,7 +388,7 @@ Retourneer JSON in dit formaat:
     }
   ],
   "quickWins": ["doelnamen met high consensus"],
-  "discussionPoints": ["doelnamen waar MT-leden verschillend over denken"]
+  "discussionPoints": ["doelnamen waar respondenten verschillend over denken"]
 }
 
 Zorg voor:

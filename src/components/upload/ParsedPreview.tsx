@@ -16,6 +16,8 @@ const QUESTION_LABELS: Record<QuestionType, string> = {
   goal_1: "Doel 1",
   goal_2: "Doel 2",
   goal_3: "Doel 3",
+  goal_4: "Doel 4",
+  goal_5: "Doel 5",
   out_of_scope: "Buiten scope"
 };
 
@@ -27,6 +29,8 @@ const QUESTION_ORDER: QuestionType[] = [
   "goal_1",
   "goal_2",
   "goal_3",
+  "goal_4",
+  "goal_5",
   "out_of_scope"
 ];
 

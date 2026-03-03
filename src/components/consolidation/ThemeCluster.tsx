@@ -1,7 +1,9 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useCallback } from "react";
 import type { ThemeCluster as ThemeClusterType } from "@/lib/types";
+import { useSpeechRecognition } from "@/lib/use-speech-recognition";
+import { ConfirmDialog } from "@/components/ui";
 
 interface ThemeClusterProps {
   theme: ThemeClusterType;
@@ -19,7 +21,47 @@ export function ThemeCluster({
   const [isEditing, setIsEditing] = useState(false);
   const [editedName, setEditedName] = useState(theme.name);
   const [editedDescription, setEditedDescription] = useState(theme.description);
-  const [isExpanded, setIsExpanded] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(true);
+  const [isRefining, setIsRefining] = useState(false);
+  const [refineFeedback, setRefineFeedback] = useState("");
+  const [isRefineLoading, setIsRefineLoading] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+
+  const handleSpeechResult = useCallback((text: string) => {
+    setRefineFeedback((prev) => (prev ? prev + " " + text : text));
+  }, []);
+
+  const { isListening, isSupported: speechSupported, toggleListening } =
+    useSpeechRecognition(handleSpeechResult);
+
+  const handleRefine = async () => {
+    if (!refineFeedback.trim() || !onUpdate) return;
+    if (isListening) toggleListening();
+    setIsRefineLoading(true);
+    try {
+      const response = await fetch("/api/refine-theme", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ theme, feedback: refineFeedback })
+      });
+      if (!response.ok) throw new Error("Verfijning mislukt");
+      const result = await response.json();
+      if (result.refined) {
+        onUpdate({
+          ...theme,
+          name: result.refined.name || theme.name,
+          description: result.refined.description || theme.description,
+          exampleQuotes: result.refined.exampleQuotes || theme.exampleQuotes
+        });
+      }
+      setRefineFeedback("");
+      setIsRefining(false);
+    } catch (error) {
+      console.error("Refine error:", error);
+    } finally {
+      setIsRefineLoading(false);
+    }
+  };
 
   const handleSave = () => {
     if (onUpdate) {
@@ -89,6 +131,7 @@ export function ThemeCluster({
                 onClick={() => setIsEditing(true)}
                 className="p-1 text-gray-400 hover:text-cito-blue rounded"
                 title="Bewerken"
+                aria-label="Thema bewerken"
               >
                 <svg
                   className="w-4 h-4"
@@ -108,9 +151,10 @@ export function ThemeCluster({
 
             {editable && onDelete && (
               <button
-                onClick={() => onDelete(theme.id)}
+                onClick={() => setShowDeleteConfirm(true)}
                 className="p-1 text-gray-400 hover:text-red-600 rounded"
                 title="Verwijderen"
+                aria-label="Thema verwijderen"
               >
                 <svg
                   className="w-4 h-4"
@@ -162,11 +206,11 @@ export function ThemeCluster({
           </div>
         )}
 
-        {/* Mentioned by */}
+        {/* Mentioned by - show names */}
         {theme.mentionedBy && theme.mentionedBy.length > 0 && (
-          <div className="mt-3 flex items-center gap-2 text-sm text-gray-600">
+          <div className="mt-3 flex items-start gap-2 text-sm text-gray-600">
             <svg
-              className="w-4 h-4"
+              className="w-4 h-4 mt-0.5 flex-shrink-0"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -179,9 +223,98 @@ export function ThemeCluster({
               />
             </svg>
             <span>
-              Genoemd door: {theme.mentionedBy.length} respondent
-              {theme.mentionedBy.length > 1 ? "en" : ""}
+              Genoemd door: {theme.mentionedBy.join(", ")}
             </span>
+          </div>
+        )}
+
+        {/* Refine with AI */}
+        {editable && onUpdate && !isEditing && (
+          <div className="mt-3">
+            {isRefining ? (
+              <div className="p-3 bg-white/80 rounded-lg border border-cito-blue/30">
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  Feedback voor AI-verfijning
+                </label>
+                <div className="relative">
+                  <textarea
+                    value={refineFeedback}
+                    onChange={(e) => setRefineFeedback(e.target.value)}
+                    placeholder={isListening ? "Luisteren... spreek je feedback in" : "Typ of spreek je feedback in..."}
+                    rows={2}
+                    className={`w-full px-3 py-2 pr-12 border rounded-lg focus:outline-none focus:ring-2 focus:ring-cito-blue text-sm resize-none ${
+                      isListening ? "border-red-400 bg-red-50" : "border-gray-300"
+                    }`}
+                    disabled={isRefineLoading}
+                    autoFocus
+                  />
+                  {speechSupported && (
+                    <button
+                      type="button"
+                      onClick={toggleListening}
+                      disabled={isRefineLoading}
+                      className={`absolute right-2 top-2 p-1.5 rounded-full transition-colors ${
+                        isListening
+                          ? "bg-red-500 text-white animate-pulse"
+                          : "bg-gray-100 text-gray-500 hover:bg-cito-blue hover:text-white"
+                      }`}
+                      title={isListening ? "Stop opname" : "Spreek feedback in"}
+                      aria-label={isListening ? "Stop opname" : "Spreek feedback in"}
+                    >
+                      <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 24 24">
+                        {isListening ? (
+                          <path d="M6 6h12v12H6z" />
+                        ) : (
+                          <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm-1-9c0-.55.45-1 1-1s1 .45 1 1v6c0 .55-.45 1-1 1s-1-.45-1-1V5zm6 6c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z" />
+                        )}
+                      </svg>
+                    </button>
+                  )}
+                </div>
+                {isListening && (
+                  <p className="text-xs text-red-600 mt-1 flex items-center gap-1">
+                    <span className="w-2 h-2 bg-red-500 rounded-full animate-pulse" />
+                    Luisteren... klik op het stopicoon om te stoppen
+                  </p>
+                )}
+                <div className="mt-2 flex gap-2">
+                  <button
+                    onClick={handleRefine}
+                    disabled={!refineFeedback.trim() || isRefineLoading}
+                    className="px-3 py-1.5 bg-cito-blue text-white text-sm rounded-lg hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-1.5"
+                  >
+                    {isRefineLoading ? (
+                      <>
+                        <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                        Verfijnen...
+                      </>
+                    ) : (
+                      "Verfijn met AI"
+                    )}
+                  </button>
+                  <button
+                    onClick={() => { if (isListening) toggleListening(); setIsRefining(false); setRefineFeedback(""); }}
+                    disabled={isRefineLoading}
+                    className="px-3 py-1.5 bg-gray-200 text-gray-700 text-sm rounded-lg hover:bg-gray-300"
+                  >
+                    Annuleren
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <button
+                onClick={() => setIsRefining(true)}
+                className="text-sm text-cito-blue hover:text-blue-800 flex items-center gap-1.5"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+                Verfijn met AI
+              </button>
+            )}
           </div>
         )}
       </div>
@@ -194,8 +327,7 @@ export function ThemeCluster({
             className="w-full px-4 py-2 flex items-center justify-between text-sm text-gray-600 hover:bg-white/50"
           >
             <span className="font-medium">
-              {theme.exampleQuotes.length} citaat
-              {theme.exampleQuotes.length > 1 ? "en" : ""}
+              Onderbouwing: {theme.exampleQuotes.length} citaat{theme.exampleQuotes.length > 1 ? "en" : ""} uit de antwoorden
             </span>
             <svg
               className={`w-4 h-4 transform transition-transform ${
@@ -244,6 +376,20 @@ export function ThemeCluster({
           </div>
         </div>
       )}
+
+      {/* Delete confirmation dialog */}
+      <ConfirmDialog
+        isOpen={showDeleteConfirm}
+        title="Thema verwijderen"
+        message={`Weet je zeker dat je het thema "${theme.name}" wilt verwijderen?`}
+        confirmLabel="Verwijderen"
+        variant="danger"
+        onConfirm={() => {
+          if (onDelete) onDelete(theme.id);
+          setShowDeleteConfirm(false);
+        }}
+        onCancel={() => setShowDeleteConfirm(false)}
+      />
     </div>
   );
 }
@@ -296,6 +442,23 @@ export function ThemeClusterList({
 
   return (
     <div className="space-y-6">
+      {/* Toelichting thema's */}
+      {themes.length > 0 && (
+        <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <h4 className="font-medium text-cito-blue mb-1">Wat zijn thema&apos;s?</h4>
+          <p className="text-sm text-gray-700">
+            De AI heeft alle antwoorden van de MT-leden geanalyseerd en terugkerende onderwerpen gegroepeerd tot thema&apos;s.
+            Elk thema laat zien <strong>wie</strong> het heeft benoemd en <strong>welke citaten</strong> uit de antwoorden eraan ten grondslag liggen.
+            Zo kunt u tijdens de sessie gericht terugkomen op specifieke inbreng.
+          </p>
+          <ul className="text-sm text-gray-600 mt-2 ml-4 list-disc space-y-0.5">
+            <li><span className="text-green-700 font-medium">Hoge consensus</span> = meer dan 66% van de respondenten benoemt dit</li>
+            <li><span className="text-orange-700 font-medium">Gemiddelde consensus</span> = 33-66% benoemt dit</li>
+            <li><span className="text-red-700 font-medium">Lage consensus</span> = minder dan 33% benoemt dit</li>
+          </ul>
+        </div>
+      )}
+
       {/* Quick Wins */}
       {showQuickWins && quickWins.length > 0 && (
         <div>

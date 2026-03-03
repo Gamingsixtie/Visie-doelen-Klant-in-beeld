@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useSession } from "@/lib/session-context";
 import { isSessionComplete } from "@/lib/types";
 import { FinalCelebration, triggerConfetti } from "@/components/celebration";
+import * as persistence from "@/lib/persistence";
 
 export function ExportStep() {
   const { flowState, getApprovedText, currentSession, documents, completeSession, closeSession } = useSession();
@@ -17,23 +18,36 @@ export function ExportStep() {
   const visieGewenste = getApprovedText("desired_situation");
   const visieBeweging = getApprovedText("change_direction");
   const visieStakeholders = getApprovedText("stakeholders");
-  const doel1 = getApprovedText("goal_1");
-  const doel2 = getApprovedText("goal_2");
-  const doel3 = getApprovedText("goal_3");
+  const goalKeys = ["goal_1", "goal_2", "goal_3", "goal_4", "goal_5"] as const;
+  const doelen = goalKeys
+    .map((key) => getApprovedText(key))
+    .filter((d): d is NonNullable<typeof d> => d !== null);
+  // Keep backward compat references
+  const doel1 = doelen[0] || null;
+  const doel2 = doelen[1] || null;
+  const doel3 = doelen[2] || null;
   const scope = getApprovedText("out_of_scope");
 
   const isComplete = isSessionComplete(flowState);
 
-  // Check completion on mount
+  // Check completion on mount - show celebration only once per session
   useEffect(() => {
     if (isComplete && !showCelebration && !downloadComplete) {
+      const alreadyShown = currentSession ? persistence.isCelebrationShown(currentSession.id) : false;
+      if (alreadyShown) {
+        setDownloadComplete(true); // Skip celebration, go straight to export view
+        return;
+      }
       // Small delay before showing celebration
       const timer = setTimeout(() => {
         setShowCelebration(true);
+        if (currentSession) {
+          persistence.setCelebrationShown(currentSession.id);
+        }
       }, 500);
       return () => clearTimeout(timer);
     }
-  }, [isComplete, showCelebration, downloadComplete]);
+  }, [isComplete, showCelebration, downloadComplete, currentSession]);
 
   // Get team members from documents
   const teamMembers = documents
@@ -49,10 +63,10 @@ export function ExportStep() {
       icon: "vision" as const
     });
   }
-  if (doel1 && doel2 && doel3) {
+  if (doelen.length >= 3) {
     achievements.push({
       id: "goals",
-      label: "Doelen bepaald",
+      label: `${doelen.length} Doelen bepaald`,
       icon: "goals" as const
     });
   }
@@ -75,6 +89,11 @@ export function ExportStep() {
     setIsGenerating(true);
 
     try {
+      // Get generated vision if available
+      const generatedVision = currentSession
+        ? persistence.getGeneratedVision(currentSession.id)
+        : null;
+
       const response = await fetch("/api/export", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -87,11 +106,10 @@ export function ExportStep() {
             changeDirection: visieBeweging?.text || "",
             stakeholders: visieStakeholders?.text || ""
           },
-          goals: [
-            { rank: 1, text: doel1?.text || "" },
-            { rank: 2, text: doel2?.text || "" },
-            { rank: 3, text: doel3?.text || "" }
-          ],
+          generatedVision: generatedVision
+            ? { uitgebreid: generatedVision.uitgebreid, beknopt: generatedVision.beknopt }
+            : null,
+          goals: doelen.map((d, i) => ({ rank: i + 1, text: d.text })),
           scope: {
             outOfScope: scope?.text?.split("\n").filter(Boolean) || []
           },
@@ -158,7 +176,7 @@ export function ExportStep() {
   if (visieGewenste) completedSteps++;
   if (visieBeweging) completedSteps++;
   if (visieStakeholders) completedSteps++;
-  if (doel1 && doel2 && doel3) completedSteps++;
+  if (doelen.length >= 3) completedSteps++;
   if (scope) completedSteps++;
   const completionPercent = Math.round((completedSteps / totalSteps) * 100);
 
@@ -281,10 +299,10 @@ export function ExportStep() {
             <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center gap-2">
               <span
                 className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                  doel1 && doel2 && doel3 ? "bg-green-100" : "bg-cito-light-green"
+                  doelen.length >= 3 ? "bg-green-100" : "bg-cito-light-green"
                 }`}
               >
-                {doel1 && doel2 && doel3 ? (
+                {doelen.length >= 3 ? (
                   <svg
                     className="w-5 h-5 text-green-600"
                     fill="none"
@@ -302,39 +320,30 @@ export function ExportStep() {
                   <span className="text-cito-green font-bold">2</span>
                 )}
               </span>
-              Doelen
+              Doelen ({doelen.length})
             </h2>
 
             <div className="space-y-3">
-              {doel1 ? (
-                <div className="flex items-start gap-3">
-                  <span className="w-6 h-6 bg-yellow-500 text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">
-                    1
-                  </span>
-                  <p className="text-gray-800">{doel1.text}</p>
-                </div>
+              {doelen.length > 0 ? (
+                doelen.map((doel, index) => {
+                  const rankColors = [
+                    "bg-yellow-500",
+                    "bg-gray-400",
+                    "bg-orange-600",
+                    "bg-blue-500",
+                    "bg-purple-500"
+                  ];
+                  return (
+                    <div key={index} className="flex items-start gap-3">
+                      <span className={`w-6 h-6 ${rankColors[index] || "bg-gray-500"} text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0`}>
+                        {index + 1}
+                      </span>
+                      <p className="text-gray-800">{doel.text}</p>
+                    </div>
+                  );
+                })
               ) : (
-                <p className="text-gray-400 italic">Doel 1: Nog niet ingevuld</p>
-              )}
-              {doel2 ? (
-                <div className="flex items-start gap-3">
-                  <span className="w-6 h-6 bg-gray-400 text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">
-                    2
-                  </span>
-                  <p className="text-gray-800">{doel2.text}</p>
-                </div>
-              ) : (
-                <p className="text-gray-400 italic">Doel 2: Nog niet ingevuld</p>
-              )}
-              {doel3 ? (
-                <div className="flex items-start gap-3">
-                  <span className="w-6 h-6 bg-orange-600 text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">
-                    3
-                  </span>
-                  <p className="text-gray-800">{doel3.text}</p>
-                </div>
-              ) : (
-                <p className="text-gray-400 italic">Doel 3: Nog niet ingevuld</p>
+                <p className="text-gray-400 italic">Nog geen doelen ingevuld</p>
               )}
             </div>
           </div>
@@ -525,7 +534,6 @@ export function ExportStep() {
           <FinalCelebration
             achievements={achievements}
             teamMembers={teamMembers}
-            sessionName={currentSession?.name}
             onClose={handleCloseCelebration}
           />
         )}

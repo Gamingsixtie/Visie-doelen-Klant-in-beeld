@@ -24,6 +24,8 @@ export function UploadStep({ onComplete }: UploadStepProps) {
   const [uploadingFiles, setUploadingFiles] = useState<UploadingFile[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("upload");
+  const [showSuccessSummary, setShowSuccessSummary] = useState(false);
+  const [lastProcessedCount, setLastProcessedCount] = useState(0);
 
   const handleFilesSelected = useCallback(
     async (files: File[]) => {
@@ -67,7 +69,7 @@ export function UploadStep({ onComplete }: UploadStepProps) {
           // Add document to session
           addDocument({
             filename: file.name,
-            respondentId: result.respondent?.id || `respondent-${Date.now()}`,
+            respondentId: result.respondent?.name || file.name.replace(".docx", ""),
             uploadedAt: new Date(),
             rawText: result.rawText || "",
             parsedResponses: result.responses || {}
@@ -100,13 +102,16 @@ export function UploadStep({ onComplete }: UploadStepProps) {
 
       setIsProcessing(false);
 
-      // Clear uploading files after a delay and show preview
+      // Show success summary instead of auto-switching
+      const successCount = files.length;
+      setLastProcessedCount(successCount);
+
       setTimeout(() => {
         setUploadingFiles([]);
         if (documents.length > 0 || files.length > 0) {
-          setViewMode("preview");
+          setShowSuccessSummary(true);
         }
-      }, 1500);
+      }, 1000);
     },
     [addDocument, documents.length]
   );
@@ -247,13 +252,23 @@ export function UploadStep({ onComplete }: UploadStepProps) {
               </h3>
               <p className="text-sm text-gray-700">
                 Upload de ingevulde MT-canvassen als Word documenten (.docx). De
-                app herkent automatisch:
+                app herkent automatisch de volgende vragen:
               </p>
-              <ul className="text-sm text-gray-700 mt-2 ml-4 list-disc space-y-1">
-                <li>Visie vraag A: Huidige situatie</li>
-                <li>Visie vraag B: Gewenste situatie</li>
-                <li>Visie vraag C: Beweging/verandering</li>
-                <li>Doelen 1, 2 en 3</li>
+              <p className="text-sm font-medium text-gray-800 mt-3 mb-1">Visie</p>
+              <ul className="text-sm text-gray-700 ml-4 list-disc space-y-1">
+                <li>Vraag A: Huidige situatie</li>
+                <li>Vraag B: Gewenste situatie</li>
+                <li>Vraag C: Beweging/verandering</li>
+                <li>Vraag D: Belanghebbenden</li>
+              </ul>
+              <p className="text-sm font-medium text-gray-800 mt-3 mb-1">Doelen</p>
+              <ul className="text-sm text-gray-700 ml-4 list-disc space-y-1">
+                <li>Doel 1 (hoogste prioriteit)</li>
+                <li>Doel 2</li>
+                <li>Doel 3</li>
+              </ul>
+              <p className="text-sm font-medium text-gray-800 mt-3 mb-1">Scope</p>
+              <ul className="text-sm text-gray-700 ml-4 list-disc space-y-1">
                 <li>Wat buiten scope valt</li>
               </ul>
             </div>
@@ -291,6 +306,45 @@ export function UploadStep({ onComplete }: UploadStepProps) {
               </button>
             </div>
           </>
+        )}
+
+        {/* Upload Success Summary */}
+        {showSuccessSummary && (
+          <div className="mt-6 p-6 bg-green-50 border-2 border-green-300 rounded-xl animate-fade-in">
+            <div className="flex items-start gap-4">
+              <div className="w-12 h-12 bg-green-500 rounded-full flex items-center justify-center flex-shrink-0">
+                <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                </svg>
+              </div>
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-green-800">
+                  {lastProcessedCount} document{lastProcessedCount > 1 ? "en" : ""} succesvol verwerkt!
+                </h3>
+                <p className="text-green-700 text-sm mt-1">
+                  Totaal {documents.length} document{documents.length > 1 ? "en" : ""} in deze sessie. Bekijk de resultaten of voeg meer documenten toe.
+                </p>
+                <div className="mt-4 flex gap-3">
+                  <button
+                    onClick={() => { setShowSuccessSummary(false); setViewMode("preview"); }}
+                    className="btn btn-primary text-sm flex items-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </svg>
+                    Bekijk resultaten
+                  </button>
+                  <button
+                    onClick={() => { setShowSuccessSummary(false); setViewMode("upload"); }}
+                    className="btn btn-secondary text-sm"
+                  >
+                    Meer uploaden
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
         )}
 
         {/* Proceed Button */}

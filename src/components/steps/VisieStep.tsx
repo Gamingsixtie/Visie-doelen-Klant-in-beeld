@@ -2,11 +2,13 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { useSession } from "@/lib/session-context";
-import { useToast } from "@/components/ui";
+import { useToast, AnalyzingIndicator } from "@/components/ui";
 import { ResponseMatrix } from "@/components/consolidation";
 import { ThemeClusterList } from "@/components/consolidation/ThemeCluster";
 import { ThemeVoting, ThemeVotingResults, type ThemeWithVotes } from "@/components/consolidation";
 import { ProposalCard } from "@/components/voting";
+import { RefineWithAI } from "@/components/ui/RefineWithAI";
+import { ConfirmDialog } from "@/components/ui";
 import type { QuestionType, ThemeCluster, ProposalVariant } from "@/lib/types";
 import * as persistence from "@/lib/persistence";
 
@@ -110,7 +112,7 @@ function AddManualThemeInline({ onAdd }: { onAdd: (name: string) => void }) {
 }
 
 export function VisieStep({ subStep, onComplete, onNavigateToStep }: VisieStepProps) {
-  const { documents, saveApprovedText, getApprovedText, updateFlowState, flowState, currentSession } = useSession();
+  const { documents, saveApprovedText, getApprovedText, removeApprovedText, updateFlowState, flowState, currentSession } = useSession();
   const { showToast } = useToast();
   const config = SUB_STEP_CONFIG[subStep];
 
@@ -121,8 +123,12 @@ export function VisieStep({ subStep, onComplete, onNavigateToStep }: VisieStepPr
   const [recommendation, setRecommendation] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lastFailedAction, setLastFailedAction] = useState<(() => void) | null>(null);
   const [showMatrix, setShowMatrix] = useState(false);
   const [votedThemes, setVotedThemes] = useState<ThemeWithVotes[]>([]);
+  const [isDirty, setIsDirty] = useState(false);
+  const [showDirtyWarning, setShowDirtyWarning] = useState(false);
+  const [pendingNavigation, setPendingNavigation] = useState<(() => void) | null>(null);
 
   // Load existing data from persistence on mount
   useEffect(() => {
@@ -150,6 +156,16 @@ export function VisieStep({ subStep, onComplete, onNavigateToStep }: VisieStepPr
       }
     }
   }, [currentSession, config.questionType, getApprovedText]);
+
+  // Warn on unsaved changes
+  useEffect(() => {
+    if (!isDirty) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [isDirty]);
 
   // Get responses for this question
   const responses = documents
@@ -200,6 +216,7 @@ export function VisieStep({ subStep, onComplete, onNavigateToStep }: VisieStepPr
       setPhase("themes");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Onbekende fout");
+      setLastFailedAction(() => handleStartAnalysis);
       setPhase("overview");
     } finally {
       setIsLoading(false);
@@ -269,6 +286,7 @@ export function VisieStep({ subStep, onComplete, onNavigateToStep }: VisieStepPr
       setPhase("voting");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Onbekende fout");
+      setLastFailedAction(() => () => handleGenerateProposals(themesToUse));
       setPhase("voting_results");
     } finally {
       setIsLoading(false);
@@ -279,6 +297,7 @@ export function VisieStep({ subStep, onComplete, onNavigateToStep }: VisieStepPr
     setProposals((prev) =>
       prev.map((p) => (p.id === variantId ? { ...p, text: newText } : p))
     );
+    setIsDirty(true);
   };
 
   const handleApprove = () => {
@@ -307,17 +326,27 @@ export function VisieStep({ subStep, onComplete, onNavigateToStep }: VisieStepPr
     }
 
     setPhase("approved");
+    setIsDirty(false);
     showToast(`${config.title} succesvol vastgesteld!`, "success");
     onComplete();
+  };
+
+  const guardNavigation = (action: () => void) => {
+    if (isDirty) {
+      setPendingNavigation(() => action);
+      setShowDirtyWarning(true);
+    } else {
+      action();
+    }
   };
 
   const approvedText = getApprovedText(config.questionType);
 
   return (
-    <div className="p-8">
+    <div className="p-6">
       <div className="max-w-5xl mx-auto">
         {/* Header */}
-        <div className="mb-8">
+        <div className="mb-6">
           <h1 className="text-2xl font-bold text-gray-900 mb-2">
             Visie: {config.title}
           </h1>
@@ -389,10 +418,23 @@ export function VisieStep({ subStep, onComplete, onNavigateToStep }: VisieStepPr
           </div>
         </div>
 
+        {/* Phase content with transition animation */}
+        <div key={phase} className="animate-fade-in">
         {/* Error display */}
         {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
-            {error}
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center justify-between">
+            <span className="text-red-700">{error}</span>
+            {lastFailedAction && (
+              <button
+                onClick={() => { setError(null); lastFailedAction(); }}
+                className="px-3 py-1.5 bg-red-100 text-red-700 text-sm rounded-lg hover:bg-red-200 flex items-center gap-1.5 flex-shrink-0"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Opnieuw proberen
+              </button>
+            )}
           </div>
         )}
 
@@ -478,35 +520,25 @@ export function VisieStep({ subStep, onComplete, onNavigateToStep }: VisieStepPr
           </div>
         )}
 
-        {/* Phase: Analyzing - Loading Screen */}
+        {/* Phase: Analyzing - Step-by-step indicator */}
         {phase === "analyzing" && (
-          <div className="card text-center py-16 animate-fade-in">
-            <div className="relative mx-auto w-20 h-20 mb-6">
-              <div className="absolute inset-0 rounded-full border-4 border-cito-light-blue"></div>
-              <div className="absolute inset-0 rounded-full border-4 border-cito-blue border-t-transparent animate-spin"></div>
-              <div className="absolute inset-2 rounded-full bg-cito-light-blue flex items-center justify-center">
-                <svg className="w-8 h-8 text-cito-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                </svg>
-              </div>
-            </div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">
-              AI is bezig met analyseren...
-            </h3>
-            <p className="text-gray-600 text-lg mb-2">
-              {proposals.length === 0
-                ? "Zoekt naar overeenkomsten, verschillen en thema's"
-                : "Genereert formuleringen op basis van de thema's"}
-            </p>
-            <p className="text-gray-500 text-sm">
-              Dit kan enkele seconden duren
-            </p>
-            <div className="mt-6 flex justify-center gap-1">
-              <div className="w-2 h-2 bg-cito-blue rounded-full animate-bounce" style={{ animationDelay: "0ms" }}></div>
-              <div className="w-2 h-2 bg-cito-blue rounded-full animate-bounce" style={{ animationDelay: "150ms" }}></div>
-              <div className="w-2 h-2 bg-cito-blue rounded-full animate-bounce" style={{ animationDelay: "300ms" }}></div>
-            </div>
-          </div>
+          <AnalyzingIndicator
+            title={proposals.length === 0
+              ? "AI analyseert de antwoorden..."
+              : "AI genereert formuleringen..."}
+            steps={proposals.length === 0
+              ? [
+                  { label: "Documenten inlezen..." },
+                  { label: "Overeenkomsten identificeren..." },
+                  { label: "Thema's clusteren..." },
+                  { label: "Resultaten voorbereiden..." }
+                ]
+              : [
+                  { label: "Thema's verwerken..." },
+                  { label: "Formulering opstellen..." },
+                  { label: "Tekst verfijnen..." }
+                ]}
+          />
         )}
 
         {/* Phase: Themes */}
@@ -779,43 +811,95 @@ export function VisieStep({ subStep, onComplete, onNavigateToStep }: VisieStepPr
           </div>
         )}
 
-        {/* Phase: Voting */}
+        {/* Phase: Voting - Single formulation */}
         {phase === "voting" && (
-          <div className="space-y-6">
-            <div className="card">
-              <h2 className="text-lg font-semibold text-gray-900 mb-2">
-                Kies een formulering
+          <div className="space-y-4">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900 mb-1">
+                Formulering
               </h2>
-              <p className="text-gray-600 mb-6">
-                Selecteer de formulering die het beste past. Je kunt de tekst ook aanpassen.
+              <p className="text-gray-600 text-sm mb-4">
+                Pas de tekst aan indien nodig, of verfijn met AI.
               </p>
 
-              <div className="space-y-4">
-                {proposals.map((variant) => (
-                  <ProposalCard
-                    key={variant.id}
-                    variant={variant}
-                    isSelected={selectedVariant === variant.id}
-                    isRecommended={variant.type === recommendation}
-                    onSelect={() => setSelectedVariant(variant.id)}
-                    editable
-                    onEdit={(text) => handleEditProposal(variant.id, text)}
-                    contextLabel={config.title}
+              {proposals.length > 0 && (
+                <div className="p-4 border-2 border-cito-blue rounded-lg bg-cito-light-blue">
+                  <textarea
+                    value={proposals[0].text}
+                    onChange={(e) => handleEditProposal(proposals[0].id, e.target.value)}
+                    rows={4}
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cito-blue focus:border-cito-blue resize-none text-gray-800 leading-relaxed"
                   />
-                ))}
-              </div>
+                  {proposals[0].includesThemes && proposals[0].includesThemes.length > 0 && (
+                    <div className="mt-2 flex flex-wrap gap-1">
+                      <span className="text-xs text-gray-500 mr-1">Verwerkte thema&apos;s:</span>
+                      {proposals[0].includesThemes.map((theme, index) => (
+                        <span
+                          key={index}
+                          className="px-2 py-0.5 bg-white text-cito-blue text-xs rounded border border-cito-blue/30"
+                        >
+                          {theme}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+                  <div className="mt-2 flex items-center gap-3">
+                    <RefineWithAI
+                      currentText={proposals[0].text}
+                      context={`Formulering voor "${config.title}" in het programma Klant in Beeld`}
+                      onRefined={(newText) => handleEditProposal(proposals[0].id, newText)}
+                      label="Verfijn formulering"
+                    />
+                    <button
+                      onClick={() => {
+                        handleGenerateProposals(themes.length > 0 ? themes : undefined);
+                      }}
+                      className="text-sm text-gray-600 hover:text-cito-blue flex items-center gap-1.5 transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                      </svg>
+                      Opnieuw genereren
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
 
-            <div className="flex justify-between">
+            <div className="flex justify-between pt-2">
               <button
-                onClick={() => setPhase("themes")}
+                onClick={() => guardNavigation(() => { setPhase("themes"); setIsDirty(false); })}
                 className="btn btn-secondary"
               >
-                Terug naar thema's
+                Terug naar thema&apos;s
               </button>
               <button
-                onClick={handleApprove}
-                disabled={!selectedVariant}
+                onClick={() => {
+                  if (proposals.length > 0) {
+                    const variant = proposals[0];
+                    saveApprovedText(config.questionType, variant.text, "proposal-1", variant.id);
+                    const visieSubStepMap: Record<string, "huidige" | "gewenste" | "beweging" | "stakeholders"> = {
+                      visie_huidige: "huidige",
+                      visie_gewenste: "gewenste",
+                      visie_beweging: "beweging",
+                      visie_stakeholders: "stakeholders"
+                    };
+                    const visieKey = visieSubStepMap[subStep];
+                    if (visieKey) {
+                      updateFlowState({
+                        visie: {
+                          ...flowState.visie,
+                          [visieKey]: { ...flowState.visie[visieKey], status: "approved" }
+                        }
+                      });
+                    }
+                    setPhase("approved");
+                    setIsDirty(false);
+                    showToast(`${config.title} succesvol vastgesteld!`, "success");
+                    onComplete();
+                  }
+                }}
+                disabled={proposals.length === 0}
                 className="btn btn-success flex items-center gap-2 disabled:opacity-50"
               >
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -862,7 +946,20 @@ export function VisieStep({ subStep, onComplete, onNavigateToStep }: VisieStepPr
               </div>
             </div>
 
-            <div className="flex justify-end">
+            <div className="flex justify-between">
+              <button
+                onClick={() => {
+                  removeApprovedText(config.questionType);
+                  setPhase("voting");
+                  showToast("Tekst vrijgegeven voor bewerking", "info");
+                }}
+                className="btn btn-secondary flex items-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                </svg>
+                Bewerken
+              </button>
               <button onClick={onComplete} className="btn btn-primary flex items-center gap-2">
                 Volgende stap
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -872,6 +969,24 @@ export function VisieStep({ subStep, onComplete, onNavigateToStep }: VisieStepPr
             </div>
           </div>
         )}
+        </div>
+        <ConfirmDialog
+          isOpen={showDirtyWarning}
+          title="Onopgeslagen wijzigingen"
+          message="Je hebt de formulering aangepast maar nog niet goedgekeurd. Wil je doorgaan zonder op te slaan?"
+          confirmLabel="Doorgaan"
+          variant="warning"
+          onConfirm={() => {
+            setShowDirtyWarning(false);
+            setIsDirty(false);
+            if (pendingNavigation) pendingNavigation();
+            setPendingNavigation(null);
+          }}
+          onCancel={() => {
+            setShowDirtyWarning(false);
+            setPendingNavigation(null);
+          }}
+        />
       </div>
     </div>
   );

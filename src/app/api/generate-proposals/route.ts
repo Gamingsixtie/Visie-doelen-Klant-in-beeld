@@ -75,28 +75,14 @@ export async function POST(request: NextRequest) {
         variants: [
           {
             id: "variant-1",
-            type: "beknopt",
-            text: "Korte versie van de formulering.",
-            emphasizes: "Kernpunten",
-            includesThemes: []
-          },
-          {
-            id: "variant-2",
-            type: "volledig",
-            text: "Uitgebreide versie met alle nuances.",
-            emphasizes: "Volledigheid",
-            includesThemes: []
-          },
-          {
-            id: "variant-3",
             type: "gebalanceerd",
-            text: "Gebalanceerde versie.",
+            text: "Gebalanceerde formulering kon niet worden gegenereerd. Pas de tekst handmatig aan.",
             emphasizes: "Balans",
             includesThemes: []
           }
         ],
         recommendation: "gebalanceerd",
-        recommendationRationale: "Beste balans tussen beknopt en volledig"
+        recommendationRationale: "Gebalanceerde formulering"
       };
     }
 

@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useSession } from "@/lib/session-context";
-import { useToast } from "@/components/ui";
+import { useToast, AnalyzingIndicator, ConfirmDialog } from "@/components/ui";
 import { ResponseMatrix } from "@/components/consolidation";
 import {
   GoalClusterList,
@@ -13,6 +13,7 @@ import {
 } from "@/components/doelen";
 import type { GoalClusterType, Goal } from "@/components/doelen";
 import type { ThemeCluster } from "@/lib/types";
+import { RefineWithAI } from "@/components/ui/RefineWithAI";
 import { MT_MEMBERS } from "@/lib/types";
 
 interface DoelenStepProps {
@@ -29,7 +30,7 @@ type StepPhase =
   | "approved";
 
 export function DoelenStep({ onComplete }: DoelenStepProps) {
-  const { documents, getApprovedText, saveApprovedText, updateFlowState, flowState } = useSession();
+  const { documents, getApprovedText, saveApprovedText, removeApprovedText, updateFlowState, flowState } = useSession();
   const { showToast } = useToast();
   const [phase, setPhase] = useState<StepPhase>("overview");
   const [clusters, setClusters] = useState<GoalClusterType[]>([]);
@@ -40,9 +41,13 @@ export function DoelenStep({ onComplete }: DoelenStepProps) {
   const [formulations, setFormulations] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lastFailedAction, setLastFailedAction] = useState<(() => void) | null>(null);
   const [showMatrix, setShowMatrix] = useState(false);
   const [currentVoter, setCurrentVoter] = useState("");
   const [useShortlistVoting, setUseShortlistVoting] = useState<boolean | null>(null);
+  const [isDirty, setIsDirty] = useState(false);
+  const [showDirtyWarning, setShowDirtyWarning] = useState(false);
+  const [pendingNavigation, setPendingNavigation] = useState<(() => void) | null>(null);
 
   // Check if already approved
   useEffect(() => {
@@ -60,6 +65,16 @@ export function DoelenStep({ onComplete }: DoelenStepProps) {
       setCurrentVoter(MT_MEMBERS[0]);
     }
   }, [currentVoter]);
+
+  // Warn on unsaved changes
+  useEffect(() => {
+    if (!isDirty) return;
+    const handler = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [isDirty]);
 
   // Collect all goals from documents
   const allGoals = documents.flatMap((doc) => {
@@ -193,6 +208,7 @@ export function DoelenStep({ onComplete }: DoelenStepProps) {
       setPhase("clusters");
     } catch (err) {
       setError(err instanceof Error ? err.message : "Onbekende fout");
+      setLastFailedAction(() => handleStartAnalysis);
       setPhase("overview");
     } finally {
       setIsLoading(false);
@@ -285,6 +301,7 @@ export function DoelenStep({ onComplete }: DoelenStepProps) {
       ...prev,
       [clusterId]: text
     }));
+    setIsDirty(true);
   };
 
   const handleApprove = () => {
@@ -305,8 +322,18 @@ export function DoelenStep({ onComplete }: DoelenStepProps) {
     });
 
     setPhase("approved");
+    setIsDirty(false);
     showToast(`${ranking.length} doelen succesvol vastgesteld!`, "success");
     onComplete();
+  };
+
+  const guardNavigation = (action: () => void) => {
+    if (isDirty) {
+      setPendingNavigation(() => action);
+      setShowDirtyWarning(true);
+    } else {
+      action();
+    }
   };
 
   const approved1 = getApprovedText("goal_1");
@@ -329,7 +356,7 @@ export function DoelenStep({ onComplete }: DoelenStepProps) {
             Doelen bepalen
           </h1>
           <p className="text-gray-600">
-            Analyseer alle doelen en bepaal gezamenlijk de top 3.
+            Analyseer alle doelen en bepaal gezamenlijk de top 3-5.
           </p>
 
           {/* Phase indicator */}
@@ -369,10 +396,23 @@ export function DoelenStep({ onComplete }: DoelenStepProps) {
           </div>
         </div>
 
+        {/* Phase content with transition animation */}
+        <div key={phase} className="animate-fade-in">
         {/* Error display */}
         {error && (
-          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg text-red-700">
-            {error}
+          <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-lg flex items-center justify-between">
+            <span className="text-red-700">{error}</span>
+            {lastFailedAction && (
+              <button
+                onClick={() => { setError(null); lastFailedAction(); }}
+                className="px-3 py-1.5 bg-red-100 text-red-700 text-sm rounded-lg hover:bg-red-200 flex items-center gap-1.5 flex-shrink-0"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                Opnieuw proberen
+              </button>
+            )}
           </div>
         )}
 
@@ -516,15 +556,15 @@ export function DoelenStep({ onComplete }: DoelenStepProps) {
 
         {/* Phase: Analyzing */}
         {phase === "analyzing" && (
-          <div className="card text-center py-12">
-            <div className="spinner mx-auto mb-4" />
-            <p className="text-gray-600 text-lg">
-              AI analyseert en clustert de doelen...
-            </p>
-            <p className="text-gray-500 text-sm mt-2">
-              Groepeert vergelijkbare doelen en identificeert patronen
-            </p>
-          </div>
+          <AnalyzingIndicator
+            title="AI analyseert en clustert de doelen..."
+            steps={[
+              { label: "Doelen van alle MT-leden inlezen..." },
+              { label: "Vergelijkbare doelen groeperen..." },
+              { label: "Prioriteiten berekenen..." },
+              { label: "Clusters samenstellen..." }
+            ]}
+          />
         )}
 
         {/* Phase: Clusters */}
@@ -975,11 +1015,26 @@ export function DoelenStep({ onComplete }: DoelenStepProps) {
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cito-blue focus:border-cito-blue resize-none"
                             placeholder="Beschrijf het doel..."
                           />
-                          <p className="text-xs text-gray-500 mt-2">
-                            Gebaseerd op input van{" "}
-                            {cluster.goals.length} respondent
-                            {cluster.goals.length > 1 ? "en" : ""}
-                          </p>
+                          <div className="mt-2 flex items-center justify-between">
+                            <p className="text-xs text-gray-500">
+                              Gebaseerd op input van{" "}
+                              {cluster.goals.length} respondent
+                              {cluster.goals.length > 1 ? "en" : ""}
+                            </p>
+                            <RefineWithAI
+                              currentText={cluster.name}
+                              context={`Dit is de titel van doel ${index + 1}. Beschrijving: ${cluster.description}. Huidige formulering: ${formulations[cluster.id] || ""}. Verfijn ALLEEN de titel (max 5-6 woorden), niet de beschrijving.`}
+                              onRefined={(newTitle) => {
+                                handleEditClusterName(cluster.id, newTitle);
+                                const oldFormulation = formulations[cluster.id] || "";
+                                if (oldFormulation.startsWith(cluster.name)) {
+                                  handleFormulationChange(cluster.id, oldFormulation.replace(cluster.name, newTitle));
+                                }
+                                showToast("Titel verfijnd en opgeslagen", "success");
+                              }}
+                              label="Verfijn titel"
+                            />
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -990,7 +1045,7 @@ export function DoelenStep({ onComplete }: DoelenStepProps) {
 
             <div className="flex justify-between">
               <button
-                onClick={() => setPhase("ranking")}
+                onClick={() => guardNavigation(() => { setPhase("ranking"); setIsDirty(false); })}
                 className="btn btn-secondary"
               >
                 Terug naar ranking
@@ -1090,29 +1145,54 @@ export function DoelenStep({ onComplete }: DoelenStepProps) {
               </div>
             </div>
 
-            <div className="flex justify-end">
+            <div className="flex justify-between">
+              <button
+                onClick={() => {
+                  // Remove all approved goals
+                  const goalKeys = ["goal_1", "goal_2", "goal_3", "goal_4", "goal_5"] as const;
+                  goalKeys.forEach((key) => {
+                    if (getApprovedText(key)) removeApprovedText(key);
+                  });
+                  setPhase("formulation");
+                  showToast("Doelen vrijgegeven voor bewerking", "info");
+                }}
+                className="btn btn-secondary flex items-center gap-2"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                </svg>
+                Bewerken
+              </button>
               <button
                 onClick={onComplete}
                 className="btn btn-primary flex items-center gap-2"
               >
                 Volgende stap
-                <svg
-                  className="w-5 h-5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9 5l7 7-7 7"
-                  />
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                 </svg>
               </button>
             </div>
           </div>
         )}
+        </div>
+        <ConfirmDialog
+          isOpen={showDirtyWarning}
+          title="Onopgeslagen wijzigingen"
+          message="Je hebt de formulering aangepast maar nog niet goedgekeurd. Wil je doorgaan zonder op te slaan?"
+          confirmLabel="Doorgaan"
+          variant="warning"
+          onConfirm={() => {
+            setShowDirtyWarning(false);
+            setIsDirty(false);
+            if (pendingNavigation) pendingNavigation();
+            setPendingNavigation(null);
+          }}
+          onCancel={() => {
+            setShowDirtyWarning(false);
+            setPendingNavigation(null);
+          }}
+        />
       </div>
     </div>
   );

@@ -4,7 +4,7 @@ import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } fro
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { sessionId, vision, goals, scope } = body;
+    const { vision, goals, scope, generatedVision } = body;
 
     // Create the Word document
     const doc = new Document({
@@ -127,8 +127,81 @@ export async function POST(request: NextRequest) {
                   size: 24
                 })
               ],
-              spacing: { after: 400 }
+              spacing: { after: 200 }
             }),
+
+            // Belanghebbenden
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: "Belanghebbenden",
+                  bold: true,
+                  size: 28
+                })
+              ],
+              heading: HeadingLevel.HEADING_2,
+              spacing: { before: 200, after: 100 }
+            }),
+            new Paragraph({
+              children: [
+                new TextRun({
+                  text: vision?.stakeholders || "Niet ingevuld",
+                  size: 24
+                })
+              ],
+              spacing: { after: 200 }
+            }),
+
+            // Generated Vision (if available)
+            ...(generatedVision?.uitgebreid
+              ? [
+                  new Paragraph({
+                    children: [
+                      new TextRun({
+                        text: "Programmavisie Klant in Beeld",
+                        bold: true,
+                        size: 28
+                      })
+                    ],
+                    heading: HeadingLevel.HEADING_2,
+                    spacing: { before: 300, after: 100 }
+                  }),
+                  new Paragraph({
+                    children: [
+                      new TextRun({
+                        text: generatedVision.uitgebreid,
+                        size: 24
+                      })
+                    ],
+                    spacing: { after: 200 }
+                  }),
+                  ...(generatedVision.beknopt
+                    ? [
+                        new Paragraph({
+                          children: [
+                            new TextRun({
+                              text: "Beknopte visie",
+                              bold: true,
+                              italics: true,
+                              size: 24
+                            })
+                          ],
+                          spacing: { before: 200, after: 50 }
+                        }),
+                        new Paragraph({
+                          children: [
+                            new TextRun({
+                              text: generatedVision.beknopt,
+                              italics: true,
+                              size: 24
+                            })
+                          ],
+                          spacing: { after: 200 }
+                        })
+                      ]
+                    : [])
+                ]
+              : []),
 
             // Doelen Section Header
             new Paragraph({

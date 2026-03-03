@@ -385,6 +385,14 @@ export function saveApprovedText(
   return newText;
 }
 
+export function deleteApprovedText(sessionId: string, questionType: QuestionType): void {
+  const approvedTexts = getFromStorage<StoredApprovedText>(STORAGE_KEYS.APPROVED_TEXTS);
+  const filtered = approvedTexts.filter(
+    (t) => !(t.sessionId === sessionId && t.questionType === questionType)
+  );
+  setInStorage(STORAGE_KEYS.APPROVED_TEXTS, filtered);
+}
+
 export function getApprovedText(sessionId: string, questionType: QuestionType): StoredApprovedText | null {
   const approvedTexts = getFromStorage<StoredApprovedText>(STORAGE_KEYS.APPROVED_TEXTS);
   const text = approvedTexts.find(
@@ -553,4 +561,16 @@ export function getGeneratedVision(sessionId: string): StoredGeneratedVision | n
     };
   }
   return null;
+}
+
+// === CELEBRATION FLAG ===
+
+export function setCelebrationShown(sessionId: string): void {
+  if (typeof window === "undefined") return;
+  localStorage.setItem(`kib_celebration_${sessionId}`, "true");
+}
+
+export function isCelebrationShown(sessionId: string): boolean {
+  if (typeof window === "undefined") return false;
+  return localStorage.getItem(`kib_celebration_${sessionId}`) === "true";
 }
