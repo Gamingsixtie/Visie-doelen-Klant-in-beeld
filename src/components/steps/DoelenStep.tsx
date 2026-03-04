@@ -617,12 +617,25 @@ export function DoelenStep({ onComplete, readOnly: readOnlyProp }: DoelenStepPro
   };
 
   const handleProceedToFormulation = () => {
-    // Initialize formulations with cluster descriptions
+    // Initialize formulations with cluster descriptions AND sub-goals
     const initialFormulations: Record<string, string> = {};
     ranking.forEach((clusterId) => {
       const cluster = clusters.find((c) => c.id === clusterId);
       if (cluster) {
-        initialFormulations[clusterId] = `${cluster.name}: ${cluster.description}`;
+        let formulation = `${cluster.name}: ${cluster.description}`;
+
+        // Include sub-goals if they exist
+        if (cluster.subGoals && cluster.subGoals.length > 0) {
+          formulation += "\n\nSubdoelen:";
+          cluster.subGoals.forEach((subGoal, idx) => {
+            formulation += `\n${idx + 1}. ${subGoal.name}`;
+            if (subGoal.description) {
+              formulation += ` - ${subGoal.description}`;
+            }
+          });
+        }
+
+        initialFormulations[clusterId] = formulation;
       }
     });
     setFormulations(initialFormulations);
@@ -635,6 +648,28 @@ export function DoelenStep({ onComplete, readOnly: readOnlyProp }: DoelenStepPro
       [clusterId]: text
     }));
     setIsDirty(true);
+  };
+
+  // Regenerate formulation for a single cluster including subdoelen
+  const handleRegenerateFormulation = (clusterId: string) => {
+    const cluster = clusters.find((c) => c.id === clusterId);
+    if (!cluster) return;
+
+    let formulation = `${cluster.name}: ${cluster.description}`;
+
+    // Include sub-goals if they exist
+    if (cluster.subGoals && cluster.subGoals.length > 0) {
+      formulation += "\n\nSubdoelen:";
+      cluster.subGoals.forEach((subGoal, idx) => {
+        formulation += `\n${idx + 1}. ${subGoal.name}`;
+        if (subGoal.description) {
+          formulation += ` - ${subGoal.description}`;
+        }
+      });
+    }
+
+    handleFormulationChange(clusterId, formulation);
+    showToast("Formulering bijgewerkt met subdoelen", "success");
   };
 
   const handleApprove = () => {
@@ -1551,35 +1586,77 @@ export function DoelenStep({ onComplete, readOnly: readOnlyProp }: DoelenStepPro
                           >
                             {cluster.name}
                           </label>
+
+                          {/* Show subdoelen if present */}
+                          {cluster.subGoals && cluster.subGoals.length > 0 && (
+                            <div className="mb-3 p-2 bg-blue-50 rounded-lg border border-blue-200">
+                              <div className="flex items-center justify-between mb-1">
+                                <p className="text-xs font-medium text-blue-800">
+                                  Subdoelen ({cluster.subGoals.length}):
+                                </p>
+                                {!isReadOnly && (
+                                  <button
+                                    onClick={() => handleRegenerateFormulation(cluster.id)}
+                                    className="text-xs text-blue-600 hover:text-blue-800 underline"
+                                  >
+                                    Voeg toe aan formulering
+                                  </button>
+                                )}
+                              </div>
+                              <ul className="text-xs text-blue-700 space-y-0.5">
+                                {cluster.subGoals.map((sg, sgIdx) => (
+                                  <li key={sg.id}>
+                                    {sgIdx + 1}. {sg.name}
+                                    {sg.description && <span className="text-blue-500"> - {sg.description}</span>}
+                                  </li>
+                                ))}
+                              </ul>
+                            </div>
+                          )}
+
                           <textarea
                             id={`formulation-${cluster.id}`}
                             value={formulations[cluster.id] || ""}
                             onChange={(e) =>
                               handleFormulationChange(cluster.id, e.target.value)
                             }
-                            rows={3}
+                            rows={cluster.subGoals && cluster.subGoals.length > 0 ? 6 : 3}
                             className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-cito-blue focus:border-cito-blue resize-none"
                             placeholder="Beschrijf het doel..."
                           />
-                          <div className="mt-2 flex items-center justify-between">
+                          <div className="mt-2 flex items-center justify-between flex-wrap gap-2">
                             <p className="text-xs text-gray-500">
                               Gebaseerd op input van{" "}
                               {cluster.goals.length} respondent
                               {cluster.goals.length > 1 ? "en" : ""}
+                              {cluster.subGoals && cluster.subGoals.length > 0 && (
+                                <span className="text-blue-600"> + {cluster.subGoals.length} subdoel{cluster.subGoals.length > 1 ? "en" : ""}</span>
+                              )}
                             </p>
-                            <RefineWithAI
-                              currentText={cluster.name}
-                              context={`Dit is de titel van doel ${index + 1}. Beschrijving: ${cluster.description}. Huidige formulering: ${formulations[cluster.id] || ""}. Verfijn ALLEEN de titel (max 5-6 woorden), niet de beschrijving.`}
-                              onRefined={(newTitle) => {
-                                handleEditClusterName(cluster.id, newTitle);
-                                const oldFormulation = formulations[cluster.id] || "";
-                                if (oldFormulation.startsWith(cluster.name)) {
-                                  handleFormulationChange(cluster.id, oldFormulation.replace(cluster.name, newTitle));
-                                }
-                                showToast("Titel verfijnd en opgeslagen", "success");
-                              }}
-                              label="Verfijn titel"
-                            />
+                            <div className="flex gap-2">
+                              <RefineWithAI
+                                currentText={formulations[cluster.id] || `${cluster.name}: ${cluster.description}`}
+                                context={`Herformuleer dit doel volledig tot een heldere, professionele formulering. Huidige titel: ${cluster.name}. Beschrijving: ${cluster.description}.${cluster.subGoals && cluster.subGoals.length > 0 ? ` Subdoelen die MOETEN worden meegenomen: ${cluster.subGoals.map(sg => `${sg.name}${sg.description ? ` (${sg.description})` : ""}`).join("; ")}.` : ""} Maak een samenhangende formulering die titel, beschrijving en alle subdoelen integreert.`}
+                                onRefined={(newFormulation) => {
+                                  handleFormulationChange(cluster.id, newFormulation);
+                                  showToast("Formulering verfijnd met AI", "success");
+                                }}
+                                label="Herformuleer volledig"
+                              />
+                              <RefineWithAI
+                                currentText={cluster.name}
+                                context={`Dit is de titel van doel ${index + 1}. Beschrijving: ${cluster.description}.${cluster.subGoals && cluster.subGoals.length > 0 ? ` Subdoelen: ${cluster.subGoals.map(sg => sg.name).join(", ")}.` : ""} Huidige formulering: ${formulations[cluster.id] || ""}. Verfijn ALLEEN de titel (max 5-6 woorden), niet de beschrijving.`}
+                                onRefined={(newTitle) => {
+                                  handleEditClusterName(cluster.id, newTitle);
+                                  const oldFormulation = formulations[cluster.id] || "";
+                                  if (oldFormulation.startsWith(cluster.name)) {
+                                    handleFormulationChange(cluster.id, oldFormulation.replace(cluster.name, newTitle));
+                                  }
+                                  showToast("Titel verfijnd en opgeslagen", "success");
+                                }}
+                                label="Verfijn titel"
+                              />
+                            </div>
                           </div>
                         </div>
                       </div>
