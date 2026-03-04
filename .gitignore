@@ -45,3 +45,8 @@ next-env.d.ts
 
 .vercel
 .env*.local
+
+# Office documents
+*.pptx
+*.doc
+*.docx
