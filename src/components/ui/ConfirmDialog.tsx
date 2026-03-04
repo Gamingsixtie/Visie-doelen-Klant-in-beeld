@@ -82,16 +82,17 @@ export function ConfirmDialog({
         onClick={onCancel}
       />
 
-      {/* Dialog */}
-      <div className="flex min-h-full items-center justify-center p-4">
-        <div className="relative bg-white rounded-xl shadow-xl max-w-md w-full p-6 transform transition-all">
-          <div className="flex items-start gap-4">
-            <div className={`w-12 h-12 ${style.iconBg} rounded-full flex items-center justify-center flex-shrink-0`}>
+      {/* Dialog - optimized for mobile */}
+      <div className="flex min-h-full items-end sm:items-center justify-center p-0 sm:p-4">
+        <div className="relative bg-white rounded-t-xl sm:rounded-xl shadow-xl w-full sm:max-w-md p-4 sm:p-6 transform transition-all">
+          <div className="flex items-start gap-3 sm:gap-4">
+            <div className={`w-10 h-10 sm:w-12 sm:h-12 ${style.iconBg} rounded-full flex items-center justify-center flex-shrink-0`}>
               <svg
-                className={`w-6 h-6 ${style.iconColor}`}
+                className={`w-5 h-5 sm:w-6 sm:h-6 ${style.iconColor}`}
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
+                aria-hidden="true"
               >
                 <path
                   strokeLinecap="round"
@@ -102,24 +103,25 @@ export function ConfirmDialog({
               </svg>
             </div>
             <div className="flex-1">
-              <h3 id="modal-title" className="text-lg font-semibold text-gray-900 mb-2">
+              <h3 id="modal-title" className="text-base sm:text-lg font-semibold text-gray-900 mb-1 sm:mb-2">
                 {title}
               </h3>
-              <p className="text-gray-600">{message}</p>
+              <p className="text-sm sm:text-base text-gray-600">{message}</p>
             </div>
           </div>
 
-          <div className="flex gap-3 mt-6">
+          {/* Buttons - stack on mobile, side-by-side on desktop */}
+          <div className="flex flex-col-reverse sm:flex-row gap-2 sm:gap-3 mt-4 sm:mt-6">
             <button
               onClick={onCancel}
-              className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-300"
+              className="flex-1 px-4 py-3 sm:py-2 min-h-[44px] border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors focus:outline-none focus:ring-2 focus:ring-gray-300 text-sm sm:text-base"
             >
               {cancelLabel}
             </button>
             <button
               ref={confirmButtonRef}
               onClick={onConfirm}
-              className={`flex-1 px-4 py-2 ${style.buttonBg} text-white rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cito-blue`}
+              className={`flex-1 px-4 py-3 sm:py-2 min-h-[44px] ${style.buttonBg} text-white rounded-lg transition-colors focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-cito-blue text-sm sm:text-base`}
             >
               {confirmLabel}
             </button>

@@ -38,8 +38,14 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   return (
     <ToastContext.Provider value={{ showToast }}>
       {children}
-      {/* Toast Container */}
-      <div className="fixed bottom-4 right-4 z-50 flex flex-col gap-2">
+      {/* Toast Container - aria-live for screen readers */}
+      <div
+        className="fixed bottom-4 right-4 z-50 flex flex-col gap-2"
+        role="region"
+        aria-label="Meldingen"
+        aria-live="polite"
+        aria-atomic="false"
+      >
         {toasts.map((toast) => (
           <ToastItem key={toast.id} toast={toast} onClose={() => removeToast(toast.id)} />
         ))}
@@ -84,6 +90,8 @@ function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
 
   return (
     <div
+      role={toast.type === "error" ? "alert" : "status"}
+      aria-live={toast.type === "error" ? "assertive" : "polite"}
       className={`${style.bg} border rounded-lg shadow-lg p-4 min-w-[300px] max-w-md flex items-center gap-3 transition-all duration-300 ${
         isVisible ? "translate-x-0 opacity-100" : "translate-x-full opacity-0"
       }`}
@@ -96,9 +104,10 @@ function ToastItem({ toast, onClose }: { toast: Toast; onClose: () => void }) {
       <p className="text-gray-800 flex-1">{toast.message}</p>
       <button
         onClick={onClose}
-        className="text-gray-400 hover:text-gray-600 transition-colors"
+        className="text-gray-400 hover:text-gray-600 transition-colors p-1"
+        aria-label="Melding sluiten"
       >
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24" aria-hidden="true">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
         </svg>
       </button>

@@ -22,7 +22,8 @@
       "Bash(printf:*)",
       "Bash(timeout 20 vercel logs:*)",
       "Bash(timeout 60 vercel logs:*)",
-      "Bash(timeout 30 vercel logs:*)"
+      "Bash(timeout 30 vercel logs:*)",
+      "Bash(grep:*)"
     ]
   }
 }
