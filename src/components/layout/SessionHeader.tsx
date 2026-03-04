@@ -3,6 +3,7 @@
 import { useRouter } from "next/navigation";
 import { useSession } from "@/lib/session-context";
 import { useSaveStatus } from "@/lib/save-status-context";
+import { SessionQRCode } from "@/components/ui";
 
 interface SessionHeaderProps {
   showBackButton?: boolean;
@@ -55,6 +56,9 @@ export function SessionHeader({ showBackButton = true }: SessionHeaderProps) {
         </div>
 
         <div className="flex items-center gap-4">
+          {/* QR Code for mobile viewing */}
+          <SessionQRCode compact />
+
           {/* Save status indicator */}
           {saveStatus !== "idle" && (
             <span className={`text-sm flex items-center gap-1.5 transition-opacity ${

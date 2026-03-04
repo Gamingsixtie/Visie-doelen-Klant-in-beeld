@@ -1,19 +1,16 @@
 "use client";
 
 import { useState } from "react";
-import type { ThemeCluster } from "@/lib/types";
+import type { ThemeCluster, ThemeWithVotes } from "@/lib/types";
 import { MT_MEMBERS } from "@/lib/types";
+
+// Re-export for backwards compatibility
+export type { ThemeWithVotes };
 
 interface ThemeVotingProps {
   themes: ThemeCluster[];
   maxVotesPerPerson?: number;
   onVotesComplete: (votedThemes: ThemeWithVotes[]) => void;
-}
-
-export interface ThemeWithVotes extends ThemeCluster {
-  votes: number;
-  votedBy: string[];
-  voteDetails: Record<string, number>; // voter -> vote count
 }
 
 type VoterVotes = Record<string, Record<string, number>>; // voter -> themeId -> votes

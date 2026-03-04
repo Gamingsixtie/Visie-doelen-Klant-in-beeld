@@ -29,7 +29,8 @@ const STORAGE_KEYS = {
   APPROVED_TEXTS: "kib_approved_texts",
   FINAL_DOCUMENTS: "kib_final_documents",
   FLOW_STATES: "kib_flow_states",
-  GENERATED_VISION: "kib_generated_vision"
+  GENERATED_VISION: "kib_generated_vision",
+  GOAL_CLUSTERS: "kib_goal_clusters"
 };
 
 // === HELPER FUNCTIONS ===
@@ -103,6 +104,20 @@ export function getSession(id: string): StoredSession | null {
     };
   }
   return null;
+}
+
+// Save or update a full session (used for syncing from server)
+export function saveSession(session: StoredSession): void {
+  const sessions = getFromStorage<StoredSession>(STORAGE_KEYS.SESSIONS);
+  const index = sessions.findIndex((s) => s.id === session.id);
+  if (index !== -1) {
+    // Update existing
+    sessions[index] = { ...session, updatedAt: new Date() };
+  } else {
+    // Add new
+    sessions.push(session);
+  }
+  setInStorage(STORAGE_KEYS.SESSIONS, sessions);
 }
 
 export function updateSession(id: string, updates: Partial<StoredSession>): void {
@@ -573,4 +588,56 @@ export function setCelebrationShown(sessionId: string): void {
 export function isCelebrationShown(sessionId: string): boolean {
   if (typeof window === "undefined") return false;
   return localStorage.getItem(`kib_celebration_${sessionId}`) === "true";
+}
+
+// === GOAL CLUSTERS ===
+
+interface StoredGoalClusterData {
+  sessionId: string;
+  clusters: unknown[];
+  selectedClusterIds: string[];
+  allVotes: Record<string, Record<string, number>>;
+  ranking: string[];
+  formulations: Record<string, string>;
+  phase: string;
+  savedAt: Date;
+}
+
+export function saveGoalClusters(
+  sessionId: string,
+  data: {
+    clusters: unknown[];
+    selectedClusterIds: string[];
+    allVotes: Record<string, Record<string, number>>;
+    ranking: string[];
+    formulations: Record<string, string>;
+    phase: string;
+  }
+): void {
+  const stored: StoredGoalClusterData = {
+    sessionId,
+    ...data,
+    savedAt: new Date()
+  };
+
+  const allData = getFromStorage<StoredGoalClusterData>(STORAGE_KEYS.GOAL_CLUSTERS);
+  const index = allData.findIndex((d) => d.sessionId === sessionId);
+  if (index >= 0) {
+    allData[index] = stored;
+  } else {
+    allData.push(stored);
+  }
+  setInStorage(STORAGE_KEYS.GOAL_CLUSTERS, allData);
+}
+
+export function getGoalClusters(sessionId: string): StoredGoalClusterData | null {
+  const allData = getFromStorage<StoredGoalClusterData>(STORAGE_KEYS.GOAL_CLUSTERS);
+  const data = allData.find((d) => d.sessionId === sessionId);
+  if (data) {
+    return {
+      ...data,
+      savedAt: parseDate(data.savedAt)
+    };
+  }
+  return null;
 }

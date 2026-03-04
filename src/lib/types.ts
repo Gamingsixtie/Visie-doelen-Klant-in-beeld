@@ -219,6 +219,77 @@ export const FLOW_STEP_LABELS: Record<FlowStep, string> = {
   export: "Export"
 };
 
+// === REAL-TIME SYNC STATE (for viewer sync) ===
+
+export type VisieStepPhase = "overview" | "analyzing" | "themes" | "theme_voting" | "voting_results" | "voting" | "approved";
+
+export interface ThemeWithVotes extends ThemeCluster {
+  votes: number;
+  votedBy: string[];
+  voteDetails: Record<string, number>;
+}
+
+export interface VisieStepSyncState {
+  phase: VisieStepPhase;
+  themes: ThemeCluster[];
+  proposals: ProposalVariant[];
+  votedThemes: ThemeWithVotes[];
+  selectedVariant: string | null;
+}
+
+export type VisieSubStepKey = "visie_huidige" | "visie_gewenste" | "visie_beweging" | "visie_stakeholders";
+
+export type DoelenStepPhase = "overview" | "analyzing" | "clusters" | "voting" | "ranking" | "formulation" | "approved";
+
+export interface DoelenStepSyncState {
+  phase: DoelenStepPhase;
+  clusters: Array<{
+    id: string;
+    name: string;
+    description: string;
+    goals: Array<{ id: string; respondentId: string; respondentName: string; text: string; rank: number }>;
+    votes: number;
+  }>;
+  selectedClusterIds: string[];
+  allVotes: Record<string, Record<string, number>>;
+  ranking: string[];
+  formulations: Record<string, string>;
+  currentVoter: string;
+}
+
+export interface SyncState {
+  visieSteps: Record<VisieSubStepKey, VisieStepSyncState>;
+  doelenStep: DoelenStepSyncState;
+}
+
+export function getInitialSyncState(): SyncState {
+  const initialVisieState: VisieStepSyncState = {
+    phase: "overview",
+    themes: [],
+    proposals: [],
+    votedThemes: [],
+    selectedVariant: null
+  };
+  const initialDoelenState: DoelenStepSyncState = {
+    phase: "overview",
+    clusters: [],
+    selectedClusterIds: [],
+    allVotes: {},
+    ranking: [],
+    formulations: {},
+    currentVoter: ""
+  };
+  return {
+    visieSteps: {
+      visie_huidige: { ...initialVisieState },
+      visie_gewenste: { ...initialVisieState },
+      visie_beweging: { ...initialVisieState },
+      visie_stakeholders: { ...initialVisieState }
+    },
+    doelenStep: initialDoelenState
+  };
+}
+
 // === SESSION & PERSISTENCE ===
 
 export type SessionStatus = "in_progress" | "completed";

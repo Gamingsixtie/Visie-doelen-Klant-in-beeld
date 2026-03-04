@@ -11,17 +11,14 @@ interface Achievement {
 
 interface FinalCelebrationProps {
   achievements: Achievement[];
-  teamMembers?: string[];
   onClose: () => void;
 }
 
 export function FinalCelebration({
   achievements,
-  teamMembers = [],
   onClose
 }: FinalCelebrationProps) {
   const [visibleAchievements, setVisibleAchievements] = useState<number>(0);
-  const [showCredits, setShowCredits] = useState(false);
   const [showFinalButton, setShowFinalButton] = useState(false);
   const [confettiTriggered, setConfettiTriggered] = useState(false);
 
@@ -96,19 +93,13 @@ export function FinalCelebration({
       });
     }, 800);
 
-    // Show credits after achievements
-    const creditsTimeout = setTimeout(() => {
-      setShowCredits(true);
-    }, achievements.length * 800 + 500);
-
-    // Show final button
+    // Show final button after achievements
     const buttonTimeout = setTimeout(() => {
       setShowFinalButton(true);
-    }, achievements.length * 800 + 2500);
+    }, achievements.length * 800 + 1000);
 
     return () => {
       clearInterval(achievementInterval);
-      clearTimeout(creditsTimeout);
       clearTimeout(buttonTimeout);
     };
   }, [achievements.length, triggerConfetti]);
@@ -210,24 +201,6 @@ export function FinalCelebration({
             </div>
           ))}
         </div>
-
-        {/* Team credits */}
-        {showCredits && teamMembers.length > 0 && (
-          <div className="mb-8 transform transition-all duration-1000 animate-fade-in">
-            <p className="text-blue-300 mb-3">Met dank aan het team:</p>
-            <div className="flex flex-wrap justify-center gap-2">
-              {teamMembers.map((member, index) => (
-                <span
-                  key={index}
-                  className="px-3 py-1 bg-white/10 rounded-full text-white text-sm"
-                  style={{ animationDelay: `${index * 100}ms` }}
-                >
-                  {member}
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
 
         {/* Final button */}
         {showFinalButton && (

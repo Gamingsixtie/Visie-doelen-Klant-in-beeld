@@ -7,6 +7,7 @@ import type { QuestionType } from "@/lib/types";
 
 interface UploadStepProps {
   onComplete: () => void;
+  readOnly?: boolean;
 }
 
 interface UploadingFile {
@@ -18,9 +19,10 @@ interface UploadingFile {
 
 type ViewMode = "upload" | "preview";
 
-export function UploadStep({ onComplete }: UploadStepProps) {
-  const { documents, addDocument, removeDocument, updateDocumentResponse } =
+export function UploadStep({ onComplete, readOnly: readOnlyProp }: UploadStepProps) {
+  const { documents, addDocument, removeDocument, updateDocumentResponse, isViewerMode } =
     useSession();
+  const isReadOnly = readOnlyProp ?? isViewerMode;
   const [uploadingFiles, setUploadingFiles] = useState<UploadingFile[]>([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [viewMode, setViewMode] = useState<ViewMode>("upload");
@@ -168,15 +170,17 @@ export function UploadStep({ onComplete }: UploadStepProps) {
 
         {viewMode === "upload" && (
           <>
-            {/* Drop Zone */}
-            <div className="mb-8">
-              <DropZone
-                onFilesSelected={handleFilesSelected}
-                acceptedTypes={[".docx"]}
-                maxFiles={10}
-                disabled={isProcessing}
-              />
-            </div>
+            {/* Drop Zone - hidden for viewers */}
+            {!isReadOnly && (
+              <div className="mb-8">
+                <DropZone
+                  onFilesSelected={handleFilesSelected}
+                  acceptedTypes={[".docx"]}
+                  maxFiles={10}
+                  disabled={isProcessing}
+                />
+              </div>
+            )}
 
             {/* Uploading Progress */}
             {uploadingFiles.length > 0 && (
@@ -348,7 +352,7 @@ export function UploadStep({ onComplete }: UploadStepProps) {
         )}
 
         {/* Proceed Button */}
-        {documents.length > 0 && (
+        {documents.length > 0 && !isReadOnly && (
           <div className="mt-8 flex justify-end">
             <button
               onClick={onComplete}

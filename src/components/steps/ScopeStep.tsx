@@ -2,11 +2,12 @@
 
 import { useState, useEffect } from "react";
 import { useSession } from "@/lib/session-context";
-import { useToast, ConfirmDialog } from "@/components/ui";
+import { useToast, ConfirmDialog, ActivityTimer, TIMER_PRESETS } from "@/components/ui";
 import { RefineWithAI } from "@/components/ui/RefineWithAI";
 
 interface ScopeStepProps {
   onComplete: () => void;
+  readOnly?: boolean;
 }
 
 interface ScopeItem {
@@ -15,8 +16,9 @@ interface ScopeItem {
   source: string;
 }
 
-export function ScopeStep({ onComplete }: ScopeStepProps) {
-  const { documents, getApprovedText, saveApprovedText, removeApprovedText, updateFlowState, flowState } = useSession();
+export function ScopeStep({ onComplete, readOnly: readOnlyProp }: ScopeStepProps) {
+  const { documents, getApprovedText, saveApprovedText, removeApprovedText, updateFlowState, flowState, isViewerMode } = useSession();
+  const isReadOnly = readOnlyProp ?? isViewerMode;
   const { showToast } = useToast();
   const [isApproved, setIsApproved] = useState(false);
   const [scopeItems, setScopeItems] = useState<ScopeItem[]>([]);
@@ -177,30 +179,40 @@ export function ScopeStep({ onComplete }: ScopeStepProps) {
               </div>
             </div>
 
-            <div className="flex justify-between">
-              <button
-                onClick={() => {
-                  removeApprovedText("out_of_scope");
-                  setIsApproved(false);
-                  showToast("Scope vrijgegeven voor bewerking", "info");
-                }}
-                className="btn btn-secondary flex items-center gap-2"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                </svg>
-                Bewerken
-              </button>
-              <button onClick={onComplete} className="btn btn-primary flex items-center gap-2">
-                Naar export
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-              </button>
-            </div>
+            {!isReadOnly && (
+              <div className="flex justify-between">
+                <button
+                  onClick={() => {
+                    removeApprovedText("out_of_scope");
+                    setIsApproved(false);
+                    showToast("Scope vrijgegeven voor bewerking", "info");
+                  }}
+                  className="btn btn-secondary flex items-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                  </svg>
+                  Bewerken
+                </button>
+                <button onClick={onComplete} className="btn btn-primary flex items-center gap-2">
+                  Naar export
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              </div>
+            )}
           </div>
         ) : (
           <div className="space-y-6">
+            {/* Timer for scope discussion */}
+            <ActivityTimer
+              mode={TIMER_PRESETS.scope_discussion.mode}
+              duration={TIMER_PRESETS.scope_discussion.duration}
+              label={TIMER_PRESETS.scope_discussion.label}
+              showModeHelper
+            />
+
             {/* Info card */}
             <div className="card bg-orange-50 border-orange-200">
               <div className="flex items-start gap-3">
@@ -373,18 +385,20 @@ export function ScopeStep({ onComplete }: ScopeStepProps) {
             </div>
 
             {/* Action buttons */}
-            <div className="flex justify-end">
-              <button
-                onClick={handleApprove}
-                disabled={scopeItems.length === 0}
-                className="btn btn-success text-lg px-8 py-3 flex items-center gap-2 disabled:opacity-50"
-              >
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                </svg>
-                Scope Kaders Goedkeuren
-              </button>
-            </div>
+            {!isReadOnly && (
+              <div className="flex justify-end">
+                <button
+                  onClick={handleApprove}
+                  disabled={scopeItems.length === 0}
+                  className="btn btn-success text-lg px-8 py-3 flex items-center gap-2 disabled:opacity-50"
+                >
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  Scope Kaders Goedkeuren
+                </button>
+              </div>
+            )}
           </div>
         )}
         {/* Delete confirmation dialog */}

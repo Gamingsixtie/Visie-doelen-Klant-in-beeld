@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useSession } from "@/lib/session-context";
-import { useToast, AnalyzingIndicator, ConfirmDialog } from "@/components/ui";
+import { useToast, AnalyzingIndicator, ConfirmDialog, ActivityTimer, TIMER_PRESETS } from "@/components/ui";
 import { ResponseMatrix } from "@/components/consolidation";
 import {
   GoalClusterList,
@@ -11,13 +11,15 @@ import {
   GoalRanking,
   RankingSummary
 } from "@/components/doelen";
-import type { GoalClusterType, Goal } from "@/components/doelen";
-import type { ThemeCluster } from "@/lib/types";
+import type { GoalClusterType, Goal, SubGoal } from "@/components/doelen";
+import type { ThemeCluster, DoelenStepPhase } from "@/lib/types";
 import { RefineWithAI } from "@/components/ui/RefineWithAI";
 import { MT_MEMBERS } from "@/lib/types";
+import * as persistence from "@/lib/persistence";
 
 interface DoelenStepProps {
   onComplete: () => void;
+  readOnly?: boolean;
 }
 
 type StepPhase =
@@ -29,25 +31,71 @@ type StepPhase =
   | "formulation"
   | "approved";
 
-export function DoelenStep({ onComplete }: DoelenStepProps) {
-  const { documents, getApprovedText, saveApprovedText, removeApprovedText, updateFlowState, flowState } = useSession();
+export function DoelenStep({ onComplete, readOnly: readOnlyProp }: DoelenStepProps) {
+  const { documents, getApprovedText, saveApprovedText, removeApprovedText, updateFlowState, flowState, isViewerMode, updateDoelenStepState, getDoelenStepState, currentSession } = useSession();
+  const isReadOnly = readOnlyProp ?? isViewerMode;
   const { showToast } = useToast();
-  const [phase, setPhase] = useState<StepPhase>("overview");
-  const [clusters, setClusters] = useState<GoalClusterType[]>([]);
-  const [selectedClusterIds, setSelectedClusterIds] = useState<string[]>([]);
+
+  // Get synced state from context (for real-time viewer sync)
+  const syncedState = getDoelenStepState();
+
+  // Use synced state values - these are shared with viewers
+  const phase = syncedState.phase;
+  const clusters = syncedState.clusters as GoalClusterType[];
+  const selectedClusterIds = syncedState.selectedClusterIds;
+  const allVotes = syncedState.allVotes;
+  const ranking = syncedState.ranking;
+  const formulations = syncedState.formulations;
+  const currentVoter = syncedState.currentVoter || MT_MEMBERS[0];
+
+  // Helper functions to update synced state
+  const setPhase = (newPhase: DoelenStepPhase) => {
+    updateDoelenStepState({ phase: newPhase });
+  };
+  const setClusters = (newClusters: GoalClusterType[] | ((prev: GoalClusterType[]) => GoalClusterType[])) => {
+    const value = typeof newClusters === 'function' ? newClusters(clusters) : newClusters;
+    updateDoelenStepState({ clusters: value });
+  };
+  const setSelectedClusterIds = (newIds: string[] | ((prev: string[]) => string[])) => {
+    const value = typeof newIds === 'function' ? newIds(selectedClusterIds) : newIds;
+    updateDoelenStepState({ selectedClusterIds: value });
+  };
+  const setAllVotes = (newVotes: Record<string, Record<string, number>> | ((prev: Record<string, Record<string, number>>) => Record<string, Record<string, number>>)) => {
+    const value = typeof newVotes === 'function' ? newVotes(allVotes) : newVotes;
+    updateDoelenStepState({ allVotes: value });
+  };
+  const setRanking = (newRanking: string[] | ((prev: string[]) => string[])) => {
+    const value = typeof newRanking === 'function' ? newRanking(ranking) : newRanking;
+    updateDoelenStepState({ ranking: value });
+  };
+  const setFormulations = (newFormulations: Record<string, string> | ((prev: Record<string, string>) => Record<string, string>)) => {
+    const value = typeof newFormulations === 'function' ? newFormulations(formulations) : newFormulations;
+    updateDoelenStepState({ formulations: value });
+  };
+  const setCurrentVoter = (newVoter: string) => {
+    updateDoelenStepState({ currentVoter: newVoter });
+  };
+
+  // Local-only state (not synced)
   const [votes, setVotes] = useState<Record<string, number>>({});
-  const [allVotes, setAllVotes] = useState<Record<string, Record<string, number>>>({});
-  const [ranking, setRanking] = useState<string[]>([]);
-  const [formulations, setFormulations] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastFailedAction, setLastFailedAction] = useState<(() => void) | null>(null);
   const [showMatrix, setShowMatrix] = useState(false);
-  const [currentVoter, setCurrentVoter] = useState("");
   const [useShortlistVoting, setUseShortlistVoting] = useState<boolean | null>(null);
   const [isDirty, setIsDirty] = useState(false);
   const [showDirtyWarning, setShowDirtyWarning] = useState(false);
   const [pendingNavigation, setPendingNavigation] = useState<(() => void) | null>(null);
+
+  // Merge mode state
+  const [isMergeMode, setIsMergeMode] = useState(false);
+  const [mergeSelectedIds, setMergeSelectedIds] = useState<string[]>([]);
+  const [isMerging, setIsMerging] = useState(false);
+
+  // Add new goal state
+  const [isAddingGoal, setIsAddingGoal] = useState(false);
+  const [newGoalName, setNewGoalName] = useState("");
+  const [newGoalDescription, setNewGoalDescription] = useState("");
 
   // Check if already approved
   useEffect(() => {
@@ -59,12 +107,60 @@ export function DoelenStep({ onComplete }: DoelenStepProps) {
     }
   }, [getApprovedText]);
 
-  // Set initial voter to first MT member
+  // Load goal clusters from persistence on mount
+  const [hasLoadedFromPersistence, setHasLoadedFromPersistence] = useState(false);
+
   useEffect(() => {
-    if (MT_MEMBERS.length > 0 && !currentVoter) {
+    if (!currentSession || isReadOnly || hasLoadedFromPersistence) return;
+
+    const saved = persistence.getGoalClusters(currentSession.id);
+    if (saved && saved.clusters.length > 0) {
+      console.log("Loading goal clusters from persistence:", saved.clusters.length, "clusters");
+      updateDoelenStepState({
+        clusters: saved.clusters as GoalClusterType[],
+        selectedClusterIds: saved.selectedClusterIds,
+        allVotes: saved.allVotes,
+        ranking: saved.ranking,
+        formulations: saved.formulations,
+        phase: saved.phase as DoelenStepPhase
+      });
+      setHasLoadedFromPersistence(true);
+    } else if (clusters.length === 0) {
+      // Mark as loaded even if nothing was found, to prevent re-loading
+      setHasLoadedFromPersistence(true);
+    }
+  }, [currentSession, isReadOnly, hasLoadedFromPersistence, clusters.length]);
+
+  // Save goal clusters to persistence when state changes
+  useEffect(() => {
+    if (!currentSession || isReadOnly) return;
+    if (clusters.length === 0) return; // Don't save empty state
+
+    persistence.saveGoalClusters(currentSession.id, {
+      clusters,
+      selectedClusterIds,
+      allVotes,
+      ranking,
+      formulations,
+      phase
+    });
+  }, [currentSession, clusters, selectedClusterIds, allVotes, ranking, formulations, phase, isReadOnly]);
+
+  // Set initial voter to first MT member (only if not already set and not in viewer mode)
+  useEffect(() => {
+    if (MT_MEMBERS.length > 0 && !currentVoter && !isReadOnly) {
       setCurrentVoter(MT_MEMBERS[0]);
     }
-  }, [currentVoter]);
+  }, [currentVoter, isReadOnly, setCurrentVoter]);
+
+  // Sync local votes when currentVoter changes
+  useEffect(() => {
+    if (currentVoter && allVotes[currentVoter]) {
+      setVotes(allVotes[currentVoter]);
+    } else {
+      setVotes({});
+    }
+  }, [currentVoter, allVotes]);
 
   // Warn on unsaved changes
   useEffect(() => {
@@ -227,6 +323,243 @@ export function DoelenStep({ onComplete }: DoelenStepProps) {
     setClusters((prev) =>
       prev.map((c) => (c.id === clusterId ? { ...c, name: newName } : c))
     );
+  };
+
+  const handleEditClusterDescription = (clusterId: string, newDescription: string) => {
+    setClusters((prev) =>
+      prev.map((c) => (c.id === clusterId ? { ...c, description: newDescription } : c))
+    );
+  };
+
+  // Sub-goal handlers
+  const handleAddSubGoal = (clusterId: string, subGoal: SubGoal) => {
+    setClusters((prev) =>
+      prev.map((c) =>
+        c.id === clusterId
+          ? { ...c, subGoals: [...(c.subGoals || []), subGoal] }
+          : c
+      )
+    );
+    showToast("Subdoel toegevoegd", "success");
+  };
+
+  const handleRemoveSubGoal = (clusterId: string, subGoalId: string) => {
+    setClusters((prev) =>
+      prev.map((c) =>
+        c.id === clusterId
+          ? { ...c, subGoals: (c.subGoals || []).filter((sg) => sg.id !== subGoalId) }
+          : c
+      )
+    );
+    showToast("Subdoel verwijderd", "info");
+  };
+
+  const handleEditSubGoal = (clusterId: string, subGoalId: string, name: string, description: string) => {
+    setClusters((prev) =>
+      prev.map((c) =>
+        c.id === clusterId
+          ? {
+              ...c,
+              subGoals: (c.subGoals || []).map((sg) =>
+                sg.id === subGoalId ? { ...sg, name, description } : sg
+              )
+            }
+          : c
+      )
+    );
+    showToast("Subdoel bijgewerkt", "success");
+  };
+
+  // Merge handlers
+  const handleToggleMergeSelect = (clusterId: string) => {
+    setMergeSelectedIds((prev) =>
+      prev.includes(clusterId)
+        ? prev.filter((id) => id !== clusterId)
+        : [...prev, clusterId]
+    );
+  };
+
+  const handleMergeClusters = async () => {
+    // Capture current selection to avoid stale closure issues
+    const idsToMerge = [...mergeSelectedIds];
+
+    if (idsToMerge.length < 2) {
+      showToast("Selecteer minimaal 2 doelen om samen te voegen", "warning");
+      return;
+    }
+
+    setIsMerging(true);
+    setError(null);
+
+    try {
+      // Get ONLY the clusters that were selected for merge
+      const clustersToMerge = clusters.filter((c) => idsToMerge.includes(c.id));
+
+      // Double check we have the right clusters
+      if (clustersToMerge.length !== idsToMerge.length) {
+        throw new Error("Kon niet alle geselecteerde doelen vinden");
+      }
+
+      // Call AI to generate a merged goal
+      const response = await fetch("/api/refine-text", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          currentText: clustersToMerge.map((c) => `${c.name}: ${c.description}`).join("\n\n"),
+          context: `Dit zijn ${clustersToMerge.length} programma doelen die samengevoegd moeten worden.`,
+          feedback: `Voeg deze ${clustersToMerge.length} doelen samen tot ÉÉN helder geformuleerd doel.
+          Behoud de essentie van alle doelen en formuleer een overkoepelend doel dat alle aspecten dekt.
+          Geef ALLEEN het samengevoegde doel terug in het formaat: "TITEL: beschrijving"
+
+          De doelen om samen te voegen zijn:
+          ${clustersToMerge.map((c, i) => `${i + 1}. ${c.name}: ${c.description}`).join("\n")}`
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error("Samenvoegen mislukt");
+      }
+
+      const result = await response.json();
+      const refinedText = result.refinedText || "";
+
+      // Parse the result
+      let newName = "Samengevoegd doel";
+      let newDescription = refinedText;
+
+      if (refinedText.includes(":")) {
+        const [titlePart, ...descParts] = refinedText.split(":");
+        newName = titlePart.trim();
+        newDescription = descParts.join(":").trim();
+      }
+
+      // Combine all goals from merged clusters
+      const combinedGoals: Goal[] = clustersToMerge.flatMap((c) => c.goals);
+
+      // Create new merged cluster
+      const mergedCluster: GoalClusterType = {
+        id: `merged-${Date.now()}`,
+        name: newName,
+        description: newDescription,
+        goals: combinedGoals,
+        votes: clustersToMerge.reduce((sum, c) => sum + c.votes, 0),
+        mergedFrom: clustersToMerge, // Store original clusters for undo
+        subGoals: []
+      };
+
+      // Replace ONLY the merged clusters with new one, keep all others intact
+      setClusters((prev) => {
+        const keptClusters = prev.filter((c) => !idsToMerge.includes(c.id));
+        return [...keptClusters, mergedCluster];
+      });
+
+      // Reset merge mode
+      setMergeSelectedIds([]);
+      setIsMergeMode(false);
+      showToast(`${clustersToMerge.length} doelen samengevoegd tot "${newName}"`, "success");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Onbekende fout bij samenvoegen");
+    } finally {
+      setIsMerging(false);
+    }
+  };
+
+  // Add a new goal cluster manually
+  const handleAddNewCluster = (name: string, description: string) => {
+    const newCluster: GoalClusterType = {
+      id: `manual-${Date.now()}`,
+      name,
+      description,
+      goals: [],
+      votes: 0,
+      subGoals: []
+    };
+    setClusters((prev) => [...prev, newCluster]);
+    showToast("Nieuw doel toegevoegd", "success");
+  };
+
+  const handleUndoMerge = (clusterId: string) => {
+    const cluster = clusters.find((c) => c.id === clusterId);
+    const mergedFrom = cluster?.mergedFrom;
+    if (!mergedFrom || mergedFrom.length === 0) return;
+
+    // Restore original clusters
+    setClusters((prev) => [
+      ...prev.filter((c) => c.id !== clusterId),
+      ...mergedFrom
+    ]);
+
+    showToast("Samenvoeging ongedaan gemaakt", "info");
+  };
+
+  // Quick merge: merge source cluster into target cluster
+  const handleMergeInto = async (sourceClusterId: string, targetClusterId: string) => {
+    const sourceCluster = clusters.find((c) => c.id === sourceClusterId);
+    const targetCluster = clusters.find((c) => c.id === targetClusterId);
+
+    if (!sourceCluster || !targetCluster) return;
+
+    setIsMerging(true);
+    setError(null);
+
+    try {
+      // Call AI to generate a merged goal
+      const response = await fetch("/api/refine-text", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          currentText: `${targetCluster.name}: ${targetCluster.description}\n\n${sourceCluster.name}: ${sourceCluster.description}`,
+          context: `Dit zijn 2 programma doelen die samengevoegd moeten worden tot één doel.`,
+          feedback: `Voeg deze 2 doelen samen tot ÉÉN helder geformuleerd doel.
+          Het hoofddoel is: "${targetCluster.name}" waar "${sourceCluster.name}" aan wordt toegevoegd.
+          Behoud de essentie van beide doelen en formuleer een overkoepelend doel dat alle aspecten dekt.
+          Geef ALLEEN het samengevoegde doel terug in het formaat: "TITEL: beschrijving"`
+        })
+      });
+
+      if (!response.ok) {
+        throw new Error("Samenvoegen mislukt");
+      }
+
+      const result = await response.json();
+      const refinedText = result.refinedText || "";
+
+      // Parse the result
+      let newName = targetCluster.name;
+      let newDescription = refinedText;
+
+      if (refinedText.includes(":")) {
+        const [titlePart, ...descParts] = refinedText.split(":");
+        newName = titlePart.trim();
+        newDescription = descParts.join(":").trim();
+      }
+
+      // Combine all goals from both clusters
+      const combinedGoals: Goal[] = [...targetCluster.goals, ...sourceCluster.goals];
+
+      // Create new merged cluster
+      const mergedCluster: GoalClusterType = {
+        id: `merged-${Date.now()}`,
+        name: newName,
+        description: newDescription,
+        goals: combinedGoals,
+        votes: targetCluster.votes + sourceCluster.votes,
+        mergedFrom: [targetCluster, sourceCluster], // Store original clusters for undo
+        subGoals: [...(targetCluster.subGoals || []), ...(sourceCluster.subGoals || [])]
+      };
+
+      // Replace both clusters with the merged one
+      setClusters((prev) => [
+        ...prev.filter((c) => c.id !== sourceClusterId && c.id !== targetClusterId),
+        mergedCluster
+      ]);
+
+      showToast(`"${sourceCluster.name}" samengevoegd met "${targetCluster.name}"`, "success");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Onbekende fout bij samenvoegen");
+    } finally {
+      setIsMerging(false);
+    }
   };
 
   const handleVotesChange = (newVotes: Record<string, number>) => {
@@ -419,6 +752,14 @@ export function DoelenStep({ onComplete }: DoelenStepProps) {
         {/* Phase: Overview */}
         {phase === "overview" && (
           <div className="space-y-6">
+            {/* Timer for discussion */}
+            <ActivityTimer
+              mode={TIMER_PRESETS.doelen_overview.mode}
+              duration={TIMER_PRESETS.doelen_overview.duration}
+              label={TIMER_PRESETS.doelen_overview.label}
+              showModeHelper
+            />
+
             {/* Toggle view */}
             <div className="flex justify-end">
               <button
@@ -528,7 +869,7 @@ export function DoelenStep({ onComplete }: DoelenStepProps) {
               </div>
             )}
 
-            {allGoals.length > 0 && (
+            {allGoals.length > 0 && !isReadOnly && (
               <div className="flex justify-end">
                 <button
                   onClick={handleStartAnalysis}
@@ -570,12 +911,83 @@ export function DoelenStep({ onComplete }: DoelenStepProps) {
         {/* Phase: Clusters */}
         {phase === "clusters" && (
           <div className="space-y-6">
+            {/* Timer for cluster discussion */}
+            <ActivityTimer
+              mode={TIMER_PRESETS.doelen_clusters.mode}
+              duration={TIMER_PRESETS.doelen_clusters.duration}
+              label={TIMER_PRESETS.doelen_clusters.label}
+              showModeHelper
+            />
+
             <div className="card">
               <div className="flex items-center justify-between mb-4">
                 <h2 className="text-lg font-semibold text-gray-900">
                   Geclustered doelen ({clusters.length})
                 </h2>
+                {!isReadOnly && (
+                  <div className="flex items-center gap-2">
+                    {isMergeMode ? (
+                      <>
+                        <span className="text-sm text-purple-600">
+                          {mergeSelectedIds.length} geselecteerd
+                        </span>
+                        <button
+                          onClick={handleMergeClusters}
+                          disabled={mergeSelectedIds.length < 2 || isMerging}
+                          className="px-3 py-1.5 bg-purple-600 text-white text-sm rounded-lg hover:bg-purple-700 disabled:opacity-50 flex items-center gap-1"
+                        >
+                          {isMerging ? (
+                            <>
+                              <svg className="w-4 h-4 animate-spin" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                              </svg>
+                              Bezig...
+                            </>
+                          ) : (
+                            <>
+                              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14v6m-3-3h6M6 10h2a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v2a2 2 0 002 2zm10 0h2a2 2 0 002-2V6a2 2 0 00-2-2h-2a2 2 0 00-2 2v2a2 2 0 002 2zM6 20h2a2 2 0 002-2v-2a2 2 0 00-2-2H6a2 2 0 00-2 2v2a2 2 0 002 2z" />
+                              </svg>
+                              Voeg samen
+                            </>
+                          )}
+                        </button>
+                        <button
+                          onClick={() => {
+                            setIsMergeMode(false);
+                            setMergeSelectedIds([]);
+                          }}
+                          className="px-3 py-1.5 bg-gray-200 text-gray-700 text-sm rounded-lg hover:bg-gray-300"
+                        >
+                          Annuleren
+                        </button>
+                      </>
+                    ) : (
+                      <button
+                        onClick={() => setIsMergeMode(true)}
+                        className="px-3 py-1.5 bg-purple-100 text-purple-700 text-sm rounded-lg hover:bg-purple-200 flex items-center gap-1"
+                        title="Voeg vergelijkbare doelen samen"
+                      >
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 14v6m-3-3h6M6 10h2a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v2a2 2 0 002 2zm10 0h2a2 2 0 002-2V6a2 2 0 00-2-2h-2a2 2 0 00-2 2v2a2 2 0 002 2zM6 20h2a2 2 0 002-2v-2a2 2 0 00-2-2H6a2 2 0 00-2 2v2a2 2 0 002 2z" />
+                        </svg>
+                        Doelen samenvoegen
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
+
+              {isMergeMode && (
+                <div className="mb-4 p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                  <p className="text-sm text-purple-700 flex items-center gap-2">
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Selecteer minimaal 2 doelen die je wilt samenvoegen. AI zal een nieuw gecombineerd doel genereren.
+                  </p>
+                </div>
+              )}
 
               <GoalClusterList
                 clusters={clusters}
@@ -583,12 +995,83 @@ export function DoelenStep({ onComplete }: DoelenStepProps) {
                 maxSelections={5}
                 onToggleSelect={handleToggleSelect}
                 onEditClusterName={handleEditClusterName}
+                onEditClusterDescription={handleEditClusterDescription}
                 editable
+                onAddSubGoal={handleAddSubGoal}
+                onRemoveSubGoal={handleRemoveSubGoal}
+                onEditSubGoal={handleEditSubGoal}
+                isMergeMode={isMergeMode}
+                mergeSelectedIds={mergeSelectedIds}
+                onToggleMergeSelect={handleToggleMergeSelect}
+                onUndoMerge={handleUndoMerge}
+                onMergeInto={handleMergeInto}
               />
+
+              {/* Add new goal button/form */}
+              {!isReadOnly && !isMergeMode && (
+                <div className="mt-4">
+                  {isAddingGoal ? (
+                    <div className="p-4 bg-green-50 border-2 border-green-200 rounded-lg space-y-3">
+                      <h4 className="font-medium text-green-800">Nieuw doel toevoegen</h4>
+                      <input
+                        type="text"
+                        value={newGoalName}
+                        onChange={(e) => setNewGoalName(e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                        placeholder="Doelnaam..."
+                        autoFocus
+                      />
+                      <textarea
+                        value={newGoalDescription}
+                        onChange={(e) => setNewGoalDescription(e.target.value)}
+                        rows={2}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                        placeholder="Beschrijving van het doel..."
+                      />
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => {
+                            if (newGoalName.trim()) {
+                              handleAddNewCluster(newGoalName.trim(), newGoalDescription.trim());
+                              setNewGoalName("");
+                              setNewGoalDescription("");
+                              setIsAddingGoal(false);
+                            }
+                          }}
+                          disabled={!newGoalName.trim()}
+                          className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 disabled:opacity-50"
+                        >
+                          Toevoegen
+                        </button>
+                        <button
+                          onClick={() => {
+                            setIsAddingGoal(false);
+                            setNewGoalName("");
+                            setNewGoalDescription("");
+                          }}
+                          className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
+                        >
+                          Annuleren
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      onClick={() => setIsAddingGoal(true)}
+                      className="w-full p-3 border-2 border-dashed border-green-300 rounded-lg text-green-600 hover:border-green-500 hover:bg-green-50 flex items-center justify-center gap-2"
+                    >
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+                      </svg>
+                      Nieuw doel toevoegen
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* Keuze: Direct gebruiken of shortlist stemronde */}
-            {useShortlistVoting === null && (
+            {useShortlistVoting === null && !isReadOnly && (
               <div className="card bg-cito-light-blue border-cito-blue">
                 <h3 className="font-semibold text-gray-900 mb-3">Hoe wilt u verder?</h3>
                 <p className="text-gray-600 text-sm mb-2">
@@ -674,7 +1157,7 @@ export function DoelenStep({ onComplete }: DoelenStepProps) {
               </div>
             )}
 
-            {useShortlistVoting === true && (
+            {useShortlistVoting === true && !isReadOnly && (
               <div className="flex justify-between">
                 <button
                   onClick={() => setPhase("overview")}
@@ -709,6 +1192,14 @@ export function DoelenStep({ onComplete }: DoelenStepProps) {
         {/* Phase: Voting */}
         {phase === "voting" && (
           <div className="space-y-6">
+            {/* Timer for individual voting - per person */}
+            <ActivityTimer
+              mode={TIMER_PRESETS.doelen_voting.mode}
+              duration={TIMER_PRESETS.doelen_voting.duration}
+              label={`${currentVoter}: ${TIMER_PRESETS.doelen_voting.label}`}
+              showModeHelper
+            />
+
             <div className="card">
               <h2 className="text-lg font-semibold text-gray-900 mb-2">
                 Dot Voting
@@ -777,13 +1268,48 @@ export function DoelenStep({ onComplete }: DoelenStepProps) {
                 </div>
               </div>
 
-              <DotVoting
-                clusters={clusters}
-                totalDots={5}
-                currentVotes={votes}
-                onVotesChange={handleVotesChange}
-                voterName={currentVoter}
-              />
+              {isReadOnly ? (
+                <div className="space-y-4">
+                  <div className="p-3 bg-purple-50 border border-purple-200 rounded-lg">
+                    <p className="text-purple-700 text-sm flex items-center gap-2">
+                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                      </svg>
+                      Bekijk de doelen hieronder - denk alvast na over je prioriteiten!
+                    </p>
+                  </div>
+                  {/* Show clusters in read-only mode so viewers can think ahead */}
+                  <div className="space-y-3">
+                    {clusters.map((cluster, index) => (
+                      <div key={cluster.id} className="p-4 bg-white border border-gray-200 rounded-lg">
+                        <div className="flex items-start gap-3">
+                          <div className="w-8 h-8 bg-cito-blue text-white rounded-full flex items-center justify-center text-sm font-bold flex-shrink-0">
+                            {index + 1}
+                          </div>
+                          <div className="flex-1">
+                            <h4 className="font-semibold text-gray-900">{cluster.name}</h4>
+                            <p className="text-sm text-gray-600 mt-1">{cluster.description}</p>
+                            {cluster.goals.length > 0 && (
+                              <p className="text-xs text-gray-500 mt-2">
+                                {cluster.goals.length} gerelateerde doelen
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ) : (
+                <DotVoting
+                  clusters={clusters}
+                  totalDots={5}
+                  currentVotes={votes}
+                  onVotesChange={handleVotesChange}
+                  voterName={currentVoter}
+                />
+              )}
             </div>
 
             {/* Results preview */}
@@ -793,40 +1319,50 @@ export function DoelenStep({ onComplete }: DoelenStepProps) {
               </div>
             )}
 
-            <div className="flex justify-between">
-              <button
-                onClick={() => setPhase("clusters")}
-                className="btn btn-secondary"
-              >
-                Terug naar clusters
-              </button>
-              <button
-                onClick={handleProceedToRanking}
-                disabled={Object.keys(allVotes).length === 0}
-                className="btn btn-primary flex items-center gap-2 disabled:opacity-50"
-              >
-                Door naar ranking
-                <svg
-                  className="w-5 h-5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
+            {!isReadOnly && (
+              <div className="flex justify-between">
+                <button
+                  onClick={() => setPhase("clusters")}
+                  className="btn btn-secondary"
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9 5l7 7-7 7"
-                  />
-                </svg>
-              </button>
-            </div>
+                  Terug naar clusters
+                </button>
+                <button
+                  onClick={handleProceedToRanking}
+                  disabled={Object.keys(allVotes).length === 0}
+                  className="btn btn-primary flex items-center gap-2 disabled:opacity-50"
+                >
+                  Door naar ranking
+                  <svg
+                    className="w-5 h-5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M9 5l7 7-7 7"
+                    />
+                  </svg>
+                </button>
+              </div>
+            )}
           </div>
         )}
 
         {/* Phase: Ranking */}
         {phase === "ranking" && (
           <div className="space-y-6">
+            {/* Timer for ranking discussion */}
+            <ActivityTimer
+              mode={TIMER_PRESETS.doelen_ranking.mode}
+              duration={TIMER_PRESETS.doelen_ranking.duration}
+              label={TIMER_PRESETS.doelen_ranking.label}
+              showModeHelper
+            />
+
             {/* Vote results summary - only show if voting was used */}
             {useShortlistVoting && Object.keys(allVotes).length > 0 && (
               <div className="card bg-cito-light-blue border-cito-blue">
@@ -931,40 +1467,50 @@ export function DoelenStep({ onComplete }: DoelenStepProps) {
               />
             </div>
 
-            <div className="flex justify-between">
-              <button
-                onClick={() => useShortlistVoting ? setPhase("voting") : setPhase("clusters")}
-                className="btn btn-secondary"
-              >
-                {useShortlistVoting ? "Terug naar stemmen" : "Terug naar clusters"}
-              </button>
-              <button
-                onClick={handleProceedToFormulation}
-                disabled={ranking.length < 1}
-                className="btn btn-primary flex items-center gap-2 disabled:opacity-50"
-              >
-                Door naar formulering ({ranking.length} doelen)
-                <svg
-                  className="w-5 h-5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
+            {!isReadOnly && (
+              <div className="flex justify-between">
+                <button
+                  onClick={() => useShortlistVoting ? setPhase("voting") : setPhase("clusters")}
+                  className="btn btn-secondary"
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9 5l7 7-7 7"
-                  />
-                </svg>
-              </button>
-            </div>
+                  {useShortlistVoting ? "Terug naar stemmen" : "Terug naar clusters"}
+                </button>
+                <button
+                  onClick={handleProceedToFormulation}
+                  disabled={ranking.length < 1}
+                  className="btn btn-primary flex items-center gap-2 disabled:opacity-50"
+                >
+                  Door naar formulering ({ranking.length} doelen)
+                  <svg
+                    className="w-5 h-5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M9 5l7 7-7 7"
+                    />
+                  </svg>
+                </button>
+              </div>
+            )}
           </div>
         )}
 
         {/* Phase: Formulation */}
         {phase === "formulation" && (
           <div className="space-y-6">
+            {/* Timer for final formulation */}
+            <ActivityTimer
+              mode={TIMER_PRESETS.doelen_formulation.mode}
+              duration={TIMER_PRESETS.doelen_formulation.duration}
+              label={TIMER_PRESETS.doelen_formulation.label}
+              showModeHelper
+            />
+
             <div className="card">
               <h2 className="text-lg font-semibold text-gray-900 mb-2">
                 Formuleer de {rankedClusters.length} doelen
@@ -1043,35 +1589,37 @@ export function DoelenStep({ onComplete }: DoelenStepProps) {
               </div>
             </div>
 
-            <div className="flex justify-between">
-              <button
-                onClick={() => guardNavigation(() => { setPhase("ranking"); setIsDirty(false); })}
-                className="btn btn-secondary"
-              >
-                Terug naar ranking
-              </button>
-              <button
-                onClick={handleApprove}
-                disabled={ranking.length < 1}
-                className="btn btn-success flex items-center gap-2 disabled:opacity-50"
-              >
-                <svg
-                  className="w-5 h-5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                  aria-hidden="true"
+            {!isReadOnly && (
+              <div className="flex justify-between">
+                <button
+                  onClick={() => guardNavigation(() => { setPhase("ranking"); setIsDirty(false); })}
+                  className="btn btn-secondary"
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M5 13l4 4L19 7"
-                  />
-                </svg>
-                Goedkeuren
-              </button>
-            </div>
+                  Terug naar ranking
+                </button>
+                <button
+                  onClick={handleApprove}
+                  disabled={ranking.length < 1}
+                  className="btn btn-success flex items-center gap-2 disabled:opacity-50"
+                >
+                  <svg
+                    className="w-5 h-5"
+                    fill="none"
+                    stroke="currentColor"
+                    viewBox="0 0 24 24"
+                    aria-hidden="true"
+                  >
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M5 13l4 4L19 7"
+                    />
+                  </svg>
+                  Goedkeuren
+                </button>
+              </div>
+            )}
           </div>
         )}
 
@@ -1145,34 +1693,36 @@ export function DoelenStep({ onComplete }: DoelenStepProps) {
               </div>
             </div>
 
-            <div className="flex justify-between">
-              <button
-                onClick={() => {
-                  // Remove all approved goals
-                  const goalKeys = ["goal_1", "goal_2", "goal_3", "goal_4", "goal_5"] as const;
-                  goalKeys.forEach((key) => {
-                    if (getApprovedText(key)) removeApprovedText(key);
-                  });
-                  setPhase("formulation");
-                  showToast("Doelen vrijgegeven voor bewerking", "info");
-                }}
-                className="btn btn-secondary flex items-center gap-2"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                </svg>
-                Bewerken
-              </button>
-              <button
-                onClick={onComplete}
-                className="btn btn-primary flex items-center gap-2"
-              >
-                Volgende stap
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                </svg>
-              </button>
-            </div>
+            {!isReadOnly && (
+              <div className="flex justify-between">
+                <button
+                  onClick={() => {
+                    // Remove all approved goals
+                    const goalKeys = ["goal_1", "goal_2", "goal_3", "goal_4", "goal_5"] as const;
+                    goalKeys.forEach((key) => {
+                      if (getApprovedText(key)) removeApprovedText(key);
+                    });
+                    setPhase("formulation");
+                    showToast("Doelen vrijgegeven voor bewerking", "info");
+                  }}
+                  className="btn btn-secondary flex items-center gap-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                  </svg>
+                  Bewerken
+                </button>
+                <button
+                  onClick={onComplete}
+                  className="btn btn-primary flex items-center gap-2"
+                >
+                  Volgende stap
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                  </svg>
+                </button>
+              </div>
+            )}
           </div>
         )}
         </div>

@@ -28,6 +28,11 @@ export function ExportStep() {
   const doel3 = doelen[2] || null;
   const scope = getApprovedText("out_of_scope");
 
+  // Get generated vision statement
+  const generatedVision = currentSession
+    ? persistence.getGeneratedVision(currentSession.id)
+    : null;
+
   const isComplete = isSessionComplete(flowState);
 
   // Check completion on mount - show celebration only once per session
@@ -63,6 +68,13 @@ export function ExportStep() {
       icon: "vision" as const
     });
   }
+  if (generatedVision) {
+    achievements.push({
+      id: "consolidated",
+      label: "Visie geconsolideerd",
+      icon: "vision" as const
+    });
+  }
   if (doelen.length >= 3) {
     achievements.push({
       id: "goals",
@@ -75,13 +87,6 @@ export function ExportStep() {
       id: "scope",
       label: "Scope afgebakend",
       icon: "scope" as const
-    });
-  }
-  if (teamMembers.length > 0) {
-    achievements.push({
-      id: "team",
-      label: `${teamMembers.length} MT-leden bijgedragen`,
-      icon: "team" as const
     });
   }
 
@@ -292,6 +297,27 @@ export function ExportStep() {
                 )}
               </div>
             </div>
+
+            {/* Generated Vision Statement */}
+            {generatedVision && (
+              <div className="mt-6 pt-6 border-t border-gray-200">
+                <h3 className="text-md font-semibold text-cito-blue mb-3 flex items-center gap-2">
+                  <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" />
+                  </svg>
+                  Geconsolideerde Visie
+                </h3>
+                <div className="bg-gradient-to-br from-cito-light-blue to-blue-50 rounded-lg p-4 border border-cito-blue/20">
+                  <p className="text-gray-800 leading-relaxed">{generatedVision.uitgebreid}</p>
+                </div>
+                {generatedVision.beknopt && (
+                  <div className="mt-3">
+                    <p className="text-xs text-gray-500 mb-1">Beknopte versie:</p>
+                    <p className="text-sm text-gray-700 italic">{generatedVision.beknopt}</p>
+                  </div>
+                )}
+              </div>
+            )}
           </div>
 
           {/* Doelen Section */}
@@ -383,25 +409,6 @@ export function ExportStep() {
               <p className="text-gray-400 italic">Nog niet ingevuld</p>
             )}
           </div>
-
-          {/* Team members */}
-          {teamMembers.length > 0 && (
-            <div className="card bg-cito-light-blue">
-              <h2 className="text-lg font-semibold text-cito-blue mb-3">
-                Bijgedragen door
-              </h2>
-              <div className="flex flex-wrap gap-2">
-                {teamMembers.map((member, index) => (
-                  <span
-                    key={index}
-                    className="px-3 py-1 bg-white rounded-full text-sm text-gray-700 shadow-sm"
-                  >
-                    {member}
-                  </span>
-                ))}
-              </div>
-            </div>
-          )}
 
           {/* Export Button */}
           <div className="flex flex-col items-center gap-4 pt-4">
@@ -533,7 +540,6 @@ export function ExportStep() {
         {showCelebration && isComplete && (
           <FinalCelebration
             achievements={achievements}
-            teamMembers={teamMembers}
             onClose={handleCloseCelebration}
           />
         )}
