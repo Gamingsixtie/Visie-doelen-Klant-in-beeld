@@ -85,7 +85,7 @@ export function ExportStep() {
   if (scope) {
     achievements.push({
       id: "scope",
-      label: "Scope afgebakend",
+      label: "Buiten scope afgebakend",
       icon: "scope" as const
     });
   }
@@ -400,7 +400,7 @@ export function ExportStep() {
                   <span className="text-orange-600 font-bold">3</span>
                 )}
               </span>
-              Scope
+              Buiten scope
             </h2>
 
             {scope ? (

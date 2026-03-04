@@ -235,7 +235,7 @@ export async function POST(request: NextRequest) {
             new Paragraph({
               children: [
                 new TextRun({
-                  text: "3. Scope",
+                  text: "3. Buiten scope",
                   bold: true,
                   size: 36,
                   color: "003366"
@@ -243,19 +243,6 @@ export async function POST(request: NextRequest) {
               ],
               heading: HeadingLevel.HEADING_1,
               spacing: { before: 400, after: 200 }
-            }),
-
-            // Out of scope subheader
-            new Paragraph({
-              children: [
-                new TextRun({
-                  text: "Buiten scope",
-                  bold: true,
-                  size: 28
-                })
-              ],
-              heading: HeadingLevel.HEADING_2,
-              spacing: { before: 200, after: 100 }
             }),
 
             // Scope items
