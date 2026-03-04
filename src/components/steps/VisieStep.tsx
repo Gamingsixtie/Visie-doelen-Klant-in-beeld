@@ -964,6 +964,7 @@ export function VisieStep({ subStep, onComplete, onNavigateToStep, readOnly: rea
                         context={`Formulering voor "${config.title}" in het programma Klant in Beeld`}
                         onRefined={(newText) => handleEditProposal(proposals[0].id, newText)}
                         label="Verfijn formulering"
+                        undoKey={`visie-${subStep}-${proposals[0].id}`}
                       />
                       <button
                         onClick={() => {

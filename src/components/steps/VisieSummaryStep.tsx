@@ -467,6 +467,7 @@ export function VisieSummaryStep({ onComplete, onNavigateToStep }: VisieSummaryS
                           currentText={generatedVision.uitgebreid}
                           context="Uitgebreide programmavisie Klant in Beeld"
                           onRefined={(newText) => setGeneratedVision((prev) => prev ? { ...prev, uitgebreid: newText } : prev)}
+                          undoKey="vision-uitgebreid"
                         />
                       </div>
                     </div>
@@ -500,6 +501,7 @@ export function VisieSummaryStep({ onComplete, onNavigateToStep }: VisieSummaryS
                           currentText={generatedVision.beknopt}
                           context="Beknopte programmavisie Klant in Beeld (elevator pitch)"
                           onRefined={(newText) => setGeneratedVision((prev) => prev ? { ...prev, beknopt: newText } : prev)}
+                          undoKey="vision-beknopt"
                         />
                       </div>
                     </div>

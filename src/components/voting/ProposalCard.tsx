@@ -221,6 +221,7 @@ export function ProposalCard({
                     currentText={variant.text}
                     context={contextLabel ? `Voorstel variant "${variant.type}" voor ${contextLabel}` : `Voorstel variant "${variant.type}"`}
                     onRefined={(newText) => onEdit(newText)}
+                    undoKey={`proposal-${variant.id}`}
                   />
                 )}
               </div>

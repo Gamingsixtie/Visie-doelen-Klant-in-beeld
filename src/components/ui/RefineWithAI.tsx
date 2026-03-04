@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useSpeechRecognition } from "@/lib/use-speech-recognition";
 
 interface RefineWithAIProps {
@@ -8,19 +8,34 @@ interface RefineWithAIProps {
   context?: string; // e.g., theme name, question type
   onRefined: (newText: string) => void;
   label?: string;
+  // Unique key to track undo history for this specific field
+  undoKey?: string;
 }
+
+// Store original texts globally so undo works across component re-renders
+const originalTexts: Map<string, string[]> = new Map();
 
 export function RefineWithAI({
   currentText,
   context,
   onRefined,
-  label = "Verfijn met AI"
+  label = "Verfijn met AI",
+  undoKey
 }: RefineWithAIProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [feedback, setFeedback] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState(false);
+  const [canUndo, setCanUndo] = useState(false);
+
+  // Check if we can undo on mount and when undoKey changes
+  useEffect(() => {
+    if (undoKey) {
+      const history = originalTexts.get(undoKey);
+      setCanUndo(!!history && history.length > 0);
+    }
+  }, [undoKey, currentText]);
 
   const handleSpeechResult = useCallback((text: string) => {
     setFeedback((prev) => (prev ? prev + " " + text : text));
@@ -50,6 +65,14 @@ export function RefineWithAI({
       const result = await response.json();
 
       if (result.refinedText) {
+        // Store original text for undo functionality
+        if (undoKey) {
+          const history = originalTexts.get(undoKey) || [];
+          history.push(currentText);
+          originalTexts.set(undoKey, history);
+          setCanUndo(true);
+        }
+
         onRefined(result.refinedText);
         setFeedback("");
         setSaved(true);
@@ -66,6 +89,19 @@ export function RefineWithAI({
     }
   };
 
+  const handleUndo = () => {
+    if (!undoKey) return;
+    const history = originalTexts.get(undoKey);
+    if (history && history.length > 0) {
+      const previousText = history.pop();
+      originalTexts.set(undoKey, history);
+      if (previousText !== undefined) {
+        onRefined(previousText);
+        setCanUndo(history.length > 0);
+      }
+    }
+  };
+
   const handleClose = () => {
     if (isListening) toggleListening();
     setIsOpen(false);
@@ -75,15 +111,29 @@ export function RefineWithAI({
 
   if (!isOpen) {
     return (
-      <button
-        onClick={(e) => { e.stopPropagation(); setIsOpen(true); }}
-        className="text-sm text-cito-blue hover:text-blue-800 flex items-center gap-1.5 transition-colors"
-      >
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-        </svg>
-        {label}
-      </button>
+      <div className="flex items-center gap-2">
+        <button
+          onClick={(e) => { e.stopPropagation(); setIsOpen(true); }}
+          className="text-sm text-cito-blue hover:text-blue-800 flex items-center gap-1.5 transition-colors"
+        >
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+          {label}
+        </button>
+        {canUndo && undoKey && (
+          <button
+            onClick={(e) => { e.stopPropagation(); handleUndo(); }}
+            className="text-sm text-orange-600 hover:text-orange-800 flex items-center gap-1 transition-colors"
+            title="Herstel vorige versie"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
+            </svg>
+            Ongedaan
+          </button>
+        )}
+      </div>
     );
   }
 

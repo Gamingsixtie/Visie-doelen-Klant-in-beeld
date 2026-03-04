@@ -1642,6 +1642,7 @@ export function DoelenStep({ onComplete, readOnly: readOnlyProp }: DoelenStepPro
                                   showToast("Formulering verfijnd met AI", "success");
                                 }}
                                 label="Herformuleer volledig"
+                                undoKey={`goal-formulation-${cluster.id}`}
                               />
                               <RefineWithAI
                                 currentText={cluster.name}
@@ -1655,6 +1656,7 @@ export function DoelenStep({ onComplete, readOnly: readOnlyProp }: DoelenStepPro
                                   showToast("Titel verfijnd en opgeslagen", "success");
                                 }}
                                 label="Verfijn titel"
+                                undoKey={`goal-title-${cluster.id}`}
                               />
                             </div>
                           </div>

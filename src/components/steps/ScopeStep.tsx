@@ -324,6 +324,7 @@ export function ScopeStep({ onComplete, readOnly: readOnlyProp }: ScopeStepProps
                                 );
                               }}
                               label="Verfijn formulering"
+                              undoKey={`scope-item-${item.id}`}
                             />
                           </div>
                           <div className="flex gap-1">

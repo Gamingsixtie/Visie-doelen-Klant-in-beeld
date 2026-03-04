@@ -246,6 +246,7 @@ export function GoalCluster({
                     context={`Doelcluster beschrijving: ${cluster.description}. Gebaseerd op ${cluster.goals.length} samengevoegde doelen van MT-leden.`}
                     onRefined={(newName) => onEditName(newName)}
                     label="Verfijn met AI"
+                    undoKey={`cluster-name-${cluster.id}`}
                   />
                 </div>
               )}
