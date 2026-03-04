@@ -50,20 +50,42 @@ export function ScopeStep({ onComplete, readOnly: readOnlyProp }: ScopeStepProps
 
     documents.forEach((doc) => {
       if (doc.parsedResponses.out_of_scope) {
-        const parts = doc.parsedResponses.out_of_scope
-          .split(/[,;\n]/)
-          .map((s) => s.trim())
-          .filter((s) => s.length > 0);
+        // Smart sentence splitting:
+        // 1. First split on newlines (each line is typically a separate item)
+        // 2. Then split on bullet points (-, •, *, numbered lists)
+        // 3. Only split on semicolons if they appear to end a sentence (followed by capital letter or end)
+        // 4. Do NOT split on commas within sentences
 
-        parts.forEach((text) => {
-          // Check for duplicates
-          const exists = items.some(
-            (i) => i.text.toLowerCase() === text.toLowerCase()
-          );
+        let text = doc.parsedResponses.out_of_scope;
+
+        // Normalize different bullet point styles
+        text = text.replace(/^[-•*]\s*/gm, '\n'); // Convert bullets to newlines
+        text = text.replace(/^\d+[.)]\s*/gm, '\n'); // Convert numbered lists to newlines
+
+        // Split on newlines and filter
+        const parts = text
+          .split(/\n+/)
+          .map((s) => s.trim())
+          // Remove leading/trailing punctuation that doesn't belong
+          .map((s) => s.replace(/^[;,.\s]+|[;,\s]+$/g, '').trim())
+          // Filter out items that are too short (likely fragments) or empty
+          .filter((s) => s.length >= 10); // Require at least 10 characters for a meaningful scope item
+
+        parts.forEach((itemText) => {
+          // Check for duplicates (case-insensitive, fuzzy match)
+          const normalizedText = itemText.toLowerCase().replace(/[^\w\s]/g, '');
+          const exists = items.some((i) => {
+            const normalizedExisting = i.text.toLowerCase().replace(/[^\w\s]/g, '');
+            // Check if texts are very similar (>80% overlap)
+            return normalizedExisting === normalizedText ||
+                   normalizedExisting.includes(normalizedText) ||
+                   normalizedText.includes(normalizedExisting);
+          });
+
           if (!exists) {
             items.push({
               id: `scope-${idCounter++}`,
-              text,
+              text: itemText,
               source: doc.filename.replace(".docx", "")
             });
           }
