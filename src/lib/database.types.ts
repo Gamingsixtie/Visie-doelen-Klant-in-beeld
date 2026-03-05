@@ -217,21 +217,36 @@ export interface Database {
           id: string;
           session_id: string;
           source_clusters: Json;
+          step_type: string;
           status: "open" | "closed";
+          facilitator_name: string | null;
+          phase: "collecting" | "consolidating" | "voting" | "approved";
+          consolidated_changes: Json | null;
+          consolidated_changes_history: Json;
           created_at: string;
         };
         Insert: {
           id?: string;
           session_id: string;
           source_clusters: Json;
+          step_type?: string;
           status?: "open" | "closed";
+          facilitator_name?: string | null;
+          phase?: "collecting" | "consolidating" | "voting" | "approved";
+          consolidated_changes?: Json | null;
+          consolidated_changes_history?: Json;
           created_at?: string;
         };
         Update: {
           id?: string;
           session_id?: string;
           source_clusters?: Json;
+          step_type?: string;
           status?: "open" | "closed";
+          facilitator_name?: string | null;
+          phase?: "collecting" | "consolidating" | "voting" | "approved";
+          consolidated_changes?: Json | null;
+          consolidated_changes_history?: Json;
           created_at?: string;
         };
       };
@@ -284,6 +299,35 @@ export interface Database {
           suggestion_id?: string;
           member_name?: string;
           value?: "accept" | "reject";
+          created_at?: string;
+        };
+      };
+      change_votes: {
+        Row: {
+          id: string;
+          round_id: string;
+          change_id: string;
+          member_name: string;
+          value: "agree" | "disagree" | "abstain";
+          comment: string | null;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          round_id: string;
+          change_id: string;
+          member_name: string;
+          value: "agree" | "disagree" | "abstain";
+          comment?: string | null;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          round_id?: string;
+          change_id?: string;
+          member_name?: string;
+          value?: "agree" | "disagree" | "abstain";
+          comment?: string | null;
           created_at?: string;
         };
       };

@@ -14,7 +14,7 @@ import {
 import type { GoalClusterType, Goal, SubGoal } from "@/components/doelen";
 import type { ThemeCluster, DoelenStepPhase, ClusterVersion } from "@/lib/types";
 import { RefineWithAI } from "@/components/ui/RefineWithAI";
-import { MT_MEMBERS } from "@/lib/types";
+import { MT_MEMBERS, FACILITATOR_NAME } from "@/lib/types";
 import * as persistence from "@/lib/persistence";
 
 interface DoelenStepProps {
@@ -1913,13 +1913,18 @@ function AsyncFeedbackSection({ sessionId, clusters }: { sessionId: string; clus
   const [isCreating, setIsCreating] = useState(false);
   const [hasExistingRound, setHasExistingRound] = useState(false);
   const [copied, setCopied] = useState(false);
+  // Facilitator is altijd de app-eigenaar, niet een MT-lid
   const { showToast } = useToast();
 
   // Check for existing feedback round
   useEffect(() => {
     if (!sessionId) return;
     import("@/lib/feedback-service").then(async (fb) => {
-      const round = await fb.getLatestOpenRound(sessionId);
+      // Check for active round (any non-approved phase)
+      let round = await fb.getActiveRound(sessionId);
+      if (!round) {
+        round = await fb.getLatestOpenRound(sessionId);
+      }
       if (round) {
         setHasExistingRound(true);
         setFeedbackUrl(`${window.location.origin}/sessies/${sessionId}/feedback`);
@@ -1933,7 +1938,7 @@ function AsyncFeedbackSection({ sessionId, clusters }: { sessionId: string; clus
 
     try {
       const fb = await import("@/lib/feedback-service");
-      const round = await fb.createFeedbackRound(sessionId, clusters);
+      const round = await fb.createFeedbackRound(sessionId, clusters, FACILITATOR_NAME);
       if (round) {
         const url = `${window.location.origin}/sessies/${sessionId}/feedback`;
         setFeedbackUrl(url);

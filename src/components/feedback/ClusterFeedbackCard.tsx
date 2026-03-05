@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import type { FeedbackSuggestion, SuggestionVote, SuggestionType } from "@/lib/feedback-service";
+import type { FeedbackSuggestion, SuggestionVote, SuggestionType, FeedbackPhase } from "@/lib/feedback-service";
 
 interface ClusterData {
   id: string;
@@ -19,7 +19,8 @@ interface ClusterFeedbackCardProps {
   onAddSuggestion: (clusterId: string, type: SuggestionType, content: Record<string, unknown>) => void;
   onVoteSuggestion: (suggestionId: string, value: "accept" | "reject") => void;
   onDeleteSuggestion: (suggestionId: string) => void;
-  isRoundClosed: boolean;
+  isRoundClosed?: boolean;
+  phase?: FeedbackPhase;
 }
 
 export function ClusterFeedbackCard({
@@ -31,8 +32,11 @@ export function ClusterFeedbackCard({
   onAddSuggestion,
   onVoteSuggestion,
   onDeleteSuggestion,
-  isRoundClosed
+  isRoundClosed,
+  phase
 }: ClusterFeedbackCardProps) {
+  // Use phase if provided, otherwise fall back to isRoundClosed
+  const isCollecting = phase ? phase === "collecting" : !isRoundClosed;
   const [showCommentInput, setShowCommentInput] = useState(false);
   const [showEditInput, setShowEditInput] = useState(false);
   const [showMergeInput, setShowMergeInput] = useState(false);
@@ -138,7 +142,7 @@ export function ClusterFeedbackCard({
                       <SuggestionContent type={suggestion.suggestion_type as SuggestionType} content={content} />
                     </div>
 
-                    {isOwn && !isRoundClosed && (
+                    {isOwn && isCollecting && (
                       <button
                         onClick={() => onDeleteSuggestion(suggestion.id)}
                         className="text-gray-400 hover:text-red-500 transition-colors p-1"
@@ -152,7 +156,7 @@ export function ClusterFeedbackCard({
                   </div>
 
                   {/* Vote buttons */}
-                  {!isOwn && !isRoundClosed && (
+                  {!isOwn && isCollecting && (
                     <div className="flex items-center gap-2 mt-2 pt-2 border-t border-gray-200">
                       <button
                         onClick={() => onVoteSuggestion(suggestion.id, "accept")}
@@ -198,7 +202,7 @@ export function ClusterFeedbackCard({
       )}
 
       {/* Action buttons */}
-      {!isRoundClosed && (
+      {isCollecting && (
         <div className="px-5 py-3">
           {!showCommentInput && !showEditInput && !showMergeInput && (
             <div className="flex flex-wrap gap-2">

@@ -9,6 +9,7 @@ import { ThemeVoting, ThemeVotingResults } from "@/components/consolidation";
 import { ProposalCard } from "@/components/voting";
 import { RefineWithAI } from "@/components/ui/RefineWithAI";
 import { ConfirmDialog } from "@/components/ui";
+import { AsyncFeedbackSection } from "@/components/feedback";
 import type { QuestionType, ThemeCluster, ProposalVariant, VisieSubStepKey, VisieStepPhase, ThemeWithVotes } from "@/lib/types";
 import * as persistence from "@/lib/persistence";
 
@@ -1064,6 +1065,21 @@ export function VisieStep({ subStep, onComplete, onNavigateToStep, readOnly: rea
                 </div>
               </div>
             </div>
+
+            {/* Async feedback section */}
+            {!isReadOnly && currentSession && approvedText && (
+              <AsyncFeedbackSection
+                sessionId={currentSession.id}
+                sourceData={[{
+                  id: subStep,
+                  name: config.title,
+                  description: approvedText.text,
+                  goals: []
+                }]}
+                stepType={subStep as "visie_huidige" | "visie_gewenste" | "visie_beweging" | "visie_stakeholders"}
+                showToast={showToast}
+              />
+            )}
 
             {!isReadOnly && (
               <div className="flex justify-between">

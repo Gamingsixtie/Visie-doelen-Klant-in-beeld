@@ -9,12 +9,57 @@ import { supabase, isSupabaseConfigured } from "./supabase";
 export type SuggestionType = "priority" | "text_edit" | "merge" | "comment";
 export type SuggestionVoteValue = "accept" | "reject";
 export type FeedbackRoundStatus = "open" | "closed";
+export type FeedbackPhase = "collecting" | "consolidating" | "voting" | "approved";
+export type ChangeVoteValue = "agree" | "disagree" | "abstain";
+export type FeedbackStepType = "doelen" | "scope" | "visie_huidige" | "visie_gewenste" | "visie_beweging" | "visie_stakeholders";
 
 export interface FeedbackRound {
   id: string;
   session_id: string;
   source_clusters: unknown[];
+  step_type: FeedbackStepType;
   status: FeedbackRoundStatus;
+  facilitator_name: string | null;
+  phase: FeedbackPhase;
+  consolidated_changes: ConsolidatedChanges | null;
+  consolidated_changes_history: ConsolidatedChangesVersion[];
+  created_at: string;
+}
+
+export interface ProposedChange {
+  change_id: string;
+  cluster_id: string;
+  change_type: "edit" | "merge" | "comment_only";
+  summary: string;
+  rationale: string;
+  original_name: string;
+  original_description: string;
+  proposed_name: string;
+  proposed_description: string;
+  source_suggestions: string[];
+  member_sources: string[];
+}
+
+export interface ConsolidatedChanges {
+  changes: ProposedChange[];
+  unchanged_clusters: string[];
+  consolidation_summary: string;
+}
+
+export interface ConsolidatedChangesVersion {
+  version_id: string;
+  changes: ConsolidatedChanges;
+  created_at: string;
+  label: string;
+}
+
+export interface ChangeVote {
+  id: string;
+  round_id: string;
+  change_id: string;
+  member_name: string;
+  value: ChangeVoteValue;
+  comment: string | null;
   created_at: string;
 }
 
@@ -63,7 +108,9 @@ export interface CommentContent {
 
 export async function createFeedbackRound(
   sessionId: string,
-  sourceClusters: unknown[]
+  sourceClusters: unknown[],
+  facilitatorName?: string,
+  stepType: FeedbackStepType = "doelen"
 ): Promise<FeedbackRound | null> {
   if (!isSupabaseConfigured() || !supabase) return null;
 
@@ -72,7 +119,10 @@ export async function createFeedbackRound(
     .insert({
       session_id: sessionId,
       source_clusters: sourceClusters as unknown as Record<string, unknown>,
-      status: "open"
+      step_type: stepType,
+      status: "open",
+      phase: "collecting" as const,
+      facilitator_name: facilitatorName || null
     })
     .select()
     .single();
@@ -265,6 +315,7 @@ export interface FullRoundData {
   round: FeedbackRound;
   suggestions: FeedbackSuggestion[];
   votes: SuggestionVote[];
+  changeVotes: ChangeVote[];
 }
 
 export async function getFullRoundData(roundId: string): Promise<FullRoundData | null> {
@@ -298,9 +349,332 @@ export async function getFullRoundData(roundId: string): Promise<FullRoundData |
     votes = (voteData || []) as unknown as SuggestionVote[];
   }
 
+  // Fetch change votes
+  let changeVotes: ChangeVote[] = [];
+  const { data: changeVoteData } = await supabase
+    .from("change_votes")
+    .select("*")
+    .eq("round_id", roundId);
+  changeVotes = (changeVoteData || []) as unknown as ChangeVote[];
+
   return {
     round: round as unknown as FeedbackRound,
     suggestions: (suggestions || []) as unknown as FeedbackSuggestion[],
-    votes
+    votes,
+    changeVotes
   };
+}
+
+// === Phase Management ===
+
+export async function updateRoundPhase(
+  roundId: string,
+  phase: FeedbackPhase
+): Promise<boolean> {
+  if (!isSupabaseConfigured() || !supabase) return false;
+
+  const updateData: Record<string, unknown> = { phase };
+  // Keep status in sync: approved = closed, rest = open
+  if (phase === "approved") {
+    updateData.status = "closed";
+  }
+
+  const { error } = await supabase
+    .from("feedback_rounds")
+    .update(updateData)
+    .eq("id", roundId);
+
+  if (error) {
+    console.error("Error updating round phase:", error);
+    return false;
+  }
+
+  return true;
+}
+
+export async function saveConsolidatedChanges(
+  roundId: string,
+  changes: ConsolidatedChanges
+): Promise<boolean> {
+  if (!isSupabaseConfigured() || !supabase) return false;
+
+  const { error } = await supabase
+    .from("feedback_rounds")
+    .update({
+      consolidated_changes: changes as unknown as Record<string, unknown>,
+      phase: "voting" as const
+    })
+    .eq("id", roundId);
+
+  if (error) {
+    console.error("Error saving consolidated changes:", error);
+    return false;
+  }
+
+  return true;
+}
+
+// === Change Votes ===
+
+export async function voteOnChange(
+  roundId: string,
+  changeId: string,
+  memberName: string,
+  value: ChangeVoteValue,
+  comment?: string
+): Promise<ChangeVote | null> {
+  if (!isSupabaseConfigured() || !supabase) return null;
+
+  const { data, error } = await supabase
+    .from("change_votes")
+    .upsert(
+      {
+        round_id: roundId,
+        change_id: changeId,
+        member_name: memberName,
+        value,
+        comment: comment || null
+      },
+      { onConflict: "round_id,change_id,member_name" }
+    )
+    .select()
+    .single();
+
+  if (error) {
+    console.error("Error voting on change:", error);
+    return null;
+  }
+
+  return data as unknown as ChangeVote;
+}
+
+export async function getChangeVotes(roundId: string): Promise<ChangeVote[]> {
+  if (!isSupabaseConfigured() || !supabase) return [];
+
+  const { data, error } = await supabase
+    .from("change_votes")
+    .select("*")
+    .eq("round_id", roundId);
+
+  if (error) {
+    console.error("Error fetching change votes:", error);
+    return [];
+  }
+
+  return (data || []) as unknown as ChangeVote[];
+}
+
+// === Consolidated Changes with History ===
+
+export async function saveConsolidatedChangesWithHistory(
+  roundId: string,
+  newChanges: ConsolidatedChanges,
+  label: string
+): Promise<boolean> {
+  if (!isSupabaseConfigured() || !supabase) return false;
+
+  // First fetch current round to get existing data
+  const { data: round, error: fetchError } = await supabase
+    .from("feedback_rounds")
+    .select("consolidated_changes, consolidated_changes_history")
+    .eq("id", roundId)
+    .single();
+
+  if (fetchError || !round) {
+    console.error("Error fetching round for history:", fetchError);
+    return false;
+  }
+
+  const currentHistory = (round.consolidated_changes_history || []) as unknown as ConsolidatedChangesVersion[];
+
+  // If there are current consolidated_changes, push them to history
+  if (round.consolidated_changes) {
+    const version: ConsolidatedChangesVersion = {
+      version_id: crypto.randomUUID(),
+      changes: round.consolidated_changes as unknown as ConsolidatedChanges,
+      created_at: new Date().toISOString(),
+      label
+    };
+    currentHistory.push(version);
+  }
+
+  const { error } = await supabase
+    .from("feedback_rounds")
+    .update({
+      consolidated_changes: newChanges as unknown as Record<string, unknown>,
+      consolidated_changes_history: currentHistory as unknown as Record<string, unknown>[],
+      phase: "voting" as const
+    })
+    .eq("id", roundId);
+
+  if (error) {
+    console.error("Error saving consolidated changes with history:", error);
+    return false;
+  }
+
+  return true;
+}
+
+export async function restoreConsolidatedChangesVersion(
+  roundId: string,
+  versionId: string
+): Promise<{ changes: ConsolidatedChanges; history: ConsolidatedChangesVersion[] } | null> {
+  if (!isSupabaseConfigured() || !supabase) return null;
+
+  // Fetch current round
+  const { data: round, error: fetchError } = await supabase
+    .from("feedback_rounds")
+    .select("consolidated_changes, consolidated_changes_history")
+    .eq("id", roundId)
+    .single();
+
+  if (fetchError || !round) return null;
+
+  const history = (round.consolidated_changes_history || []) as unknown as ConsolidatedChangesVersion[];
+  const versionToRestore = history.find(v => v.version_id === versionId);
+  if (!versionToRestore) return null;
+
+  // Push current state to history before restoring
+  if (round.consolidated_changes) {
+    history.push({
+      version_id: crypto.randomUUID(),
+      changes: round.consolidated_changes as unknown as ConsolidatedChanges,
+      created_at: new Date().toISOString(),
+      label: "Voor herstelling"
+    });
+  }
+
+  const { error } = await supabase
+    .from("feedback_rounds")
+    .update({
+      consolidated_changes: versionToRestore.changes as unknown as Record<string, unknown>,
+      consolidated_changes_history: history as unknown as Record<string, unknown>[]
+    })
+    .eq("id", roundId);
+
+  if (error) {
+    console.error("Error restoring version:", error);
+    return null;
+  }
+
+  return { changes: versionToRestore.changes, history };
+}
+
+export async function deleteChangeVotesForChange(
+  roundId: string,
+  changeId: string
+): Promise<boolean> {
+  if (!isSupabaseConfigured() || !supabase) return false;
+
+  const { error } = await supabase
+    .from("change_votes")
+    .delete()
+    .eq("round_id", roundId)
+    .eq("change_id", changeId);
+
+  if (error) {
+    console.error("Error deleting change votes:", error);
+    return false;
+  }
+
+  return true;
+}
+
+export async function deleteAllChangeVotes(
+  roundId: string
+): Promise<boolean> {
+  if (!isSupabaseConfigured() || !supabase) return false;
+
+  const { error } = await supabase
+    .from("change_votes")
+    .delete()
+    .eq("round_id", roundId);
+
+  if (error) {
+    console.error("Error deleting all change votes:", error);
+    return false;
+  }
+
+  return true;
+}
+
+// === Reset Feedback Round (keep source data, clear all feedback) ===
+
+export async function resetFeedbackRound(
+  roundId: string
+): Promise<boolean> {
+  if (!isSupabaseConfigured() || !supabase) return false;
+
+  try {
+    // Delete all change votes
+    await supabase
+      .from("change_votes")
+      .delete()
+      .eq("round_id", roundId);
+
+    // Get suggestion IDs for this round
+    const { data: suggestions } = await supabase
+      .from("feedback_suggestions")
+      .select("id")
+      .eq("round_id", roundId);
+
+    // Delete suggestion votes
+    if (suggestions && suggestions.length > 0) {
+      const suggestionIds = suggestions.map((s: { id: string }) => s.id);
+      await supabase
+        .from("suggestion_votes")
+        .delete()
+        .in("suggestion_id", suggestionIds);
+    }
+
+    // Delete all suggestions
+    await supabase
+      .from("feedback_suggestions")
+      .delete()
+      .eq("round_id", roundId);
+
+    // Reset round: clear consolidated changes, reset phase, clear history
+    await supabase
+      .from("feedback_rounds")
+      .update({
+        phase: "collecting",
+        consolidated_changes: null,
+        consolidated_changes_history: []
+      })
+      .eq("id", roundId);
+
+    return true;
+  } catch (error) {
+    console.error("Error resetting feedback round:", error);
+    return false;
+  }
+}
+
+// === Active Round (any non-approved phase) ===
+
+export async function getActiveRound(sessionId: string, stepType?: FeedbackStepType): Promise<FeedbackRound | null> {
+  if (!isSupabaseConfigured() || !supabase) return null;
+
+  let query = supabase
+    .from("feedback_rounds")
+    .select("*")
+    .eq("session_id", sessionId)
+    .in("phase", ["collecting", "consolidating", "voting"]);
+
+  if (stepType) {
+    query = query.eq("step_type", stepType);
+  }
+
+  const { data, error } = await query
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .single();
+
+  if (error) {
+    if (error.code === "PGRST116") return null;
+    console.error("Error fetching active round:", error);
+    return null;
+  }
+
+  return data as unknown as FeedbackRound;
 }

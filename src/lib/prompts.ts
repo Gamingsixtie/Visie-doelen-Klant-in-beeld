@@ -282,6 +282,188 @@ Stijl:
 Retourneer het document als markdown.
 `;
 
+export const CONSOLIDATE_FEEDBACK_PROMPT = `
+Je bent een expert in het consolideren van feedback op doelstellingen voor organisatieprogramma's.
+
+${CITO_CONTEXT}
+
+CONTEXT: Het MT van Cito heeft doelen opgesteld voor het programma Klant in Beeld. MT-leden hebben async feedback gegeven in de vorm van opmerkingen, tekstwijzigingen en samenvoeg-suggesties. Jij consolideert deze feedback tot concrete wijzigingsvoorstellen.
+
+HUIDIGE DOELEN (clusters):
+{clusters}
+
+FEEDBACK VAN MT-LEDEN:
+{suggestions}
+
+OPDRACHT:
+Analyseer alle feedback en stel concrete wijzigingen voor. Volg deze regels STRIKT:
+
+1. ALLEEN AANPASSEN WAAR FEEDBACK OVER IS
+   - Als er GEEN feedback is op een doel, laat het ONGEWIJZIGD
+   - Wijzig niets zonder onderbouwing vanuit de feedback
+   - Voeg geen eigen interpretaties toe
+
+2. VERGELIJKBARE SUGGESTIES GROEPEREN
+   - Als meerdere leden dezelfde of vergelijkbare feedback geven, bundel dit tot één wijzigingsvoorstel
+   - Geen dubbelingen in de voorstellen
+   - Vermeld alle leden die aan de suggestie hebben bijgedragen
+
+3. KERNFORMULERING BEHOUDEN
+   - Herschrijf NOOIT een doelstelling volledig
+   - Pas alleen aan wat de feedback concreet vraagt
+   - Behoud de structuur, stijl en terminologie van de originele tekst
+   - Kleine chirurgische aanpassingen zijn beter dan grote herschrijvingen
+
+4. BRONVERMELDING
+   - Koppel elke wijziging aan de specifieke feedback en leden die het onderbouwen
+   - Geef een heldere rationale waarom deze wijziging wordt voorgesteld
+
+5. SECTOR-NEUTRAAL
+   - Formuleringen moeten sector-overstijgend zijn
+   - Past bij "Werken aan programma's" methodiek (Prevaas & Van Loon)
+   - Bij doelstellingen: zo geformuleerd dat je er gewenste effecten, benodigde vermogens en concrete inspanningen uit kunt afleiden
+
+WIJZIGINGSTYPEN:
+- "edit": Tekstuele aanpassing van naam en/of beschrijving
+- "merge": Samenvoegen van twee of meer clusters (als feedback hier expliciet om vraagt)
+- "comment_only": Alleen opmerkingen, geen tekstwijziging nodig (wel documenteren)
+
+Retourneer JSON in dit formaat:
+{
+  "changes": [
+    {
+      "change_id": "change-1",
+      "cluster_id": "het cluster ID waarop de wijziging betrekking heeft",
+      "change_type": "edit|merge|comment_only",
+      "summary": "Korte samenvatting van de wijziging (1 zin)",
+      "rationale": "Waarom deze wijziging wordt voorgesteld, gebaseerd op de feedback",
+      "original_name": "Originele naam van het doel",
+      "original_description": "Originele beschrijving",
+      "proposed_name": "Voorgestelde naam (ongewijzigd als niet nodig)",
+      "proposed_description": "Voorgestelde beschrijving (ongewijzigd als niet nodig)",
+      "source_suggestions": ["suggestion IDs die deze wijziging onderbouwen"],
+      "member_sources": ["namen van leden die feedback gaven"]
+    }
+  ],
+  "unchanged_clusters": ["cluster IDs die ongewijzigd blijven"],
+  "consolidation_summary": "Korte samenvatting: hoeveel wijzigingen, hoeveel ongewijzigd, belangrijkste thema's in de feedback"
+}
+
+BELANGRIJK:
+- Retourneer ALLEEN geldig JSON, geen markdown of extra tekst
+- Elk cluster moet óf in "changes" óf in "unchanged_clusters" voorkomen
+- proposed_name en proposed_description moeten ALTIJD ingevuld zijn (ook als ongewijzigd)
+`;
+
+// Step-type-specific consolidation context for generic feedback
+const STEP_TYPE_CONTEXT: Record<string, { label: string; itemLabel: string; description: string }> = {
+  doelen: {
+    label: "Doelen",
+    itemLabel: "doelstelling",
+    description: "Het MT van Cito heeft doelen opgesteld voor het programma Klant in Beeld. MT-leden hebben async feedback gegeven in de vorm van opmerkingen, tekstwijzigingen en samenvoeg-suggesties. Jij consolideert deze feedback tot concrete wijzigingsvoorstellen."
+  },
+  scope: {
+    label: "Scope (buiten scope)",
+    itemLabel: "scope-item",
+    description: "Het MT van Cito heeft scope-afbakening (wat buiten scope valt) opgesteld voor het programma Klant in Beeld. MT-leden hebben async feedback gegeven op de scope-items. Jij consolideert deze feedback tot concrete wijzigingsvoorstellen voor de scope-afbakening."
+  },
+  visie_huidige: {
+    label: "Visie - Huidige situatie",
+    itemLabel: "visietekst",
+    description: "Het MT van Cito heeft een visietekst opgesteld over de HUIDIGE SITUATIE voor het programma Klant in Beeld. MT-leden hebben async feedback gegeven op deze tekst. Jij consolideert deze feedback tot concrete wijzigingsvoorstellen."
+  },
+  visie_gewenste: {
+    label: "Visie - Gewenste situatie",
+    itemLabel: "visietekst",
+    description: "Het MT van Cito heeft een visietekst opgesteld over de GEWENSTE SITUATIE voor het programma Klant in Beeld. MT-leden hebben async feedback gegeven op deze tekst. Jij consolideert deze feedback tot concrete wijzigingsvoorstellen."
+  },
+  visie_beweging: {
+    label: "Visie - Beweging",
+    itemLabel: "visietekst",
+    description: "Het MT van Cito heeft een visietekst opgesteld over de BEWEGING/VERANDERING die nodig is voor het programma Klant in Beeld. MT-leden hebben async feedback gegeven op deze tekst. Jij consolideert deze feedback tot concrete wijzigingsvoorstellen."
+  },
+  visie_stakeholders: {
+    label: "Visie - Stakeholders",
+    itemLabel: "visietekst",
+    description: "Het MT van Cito heeft een visietekst opgesteld over de STAKEHOLDERS/BELANGHEBBENDEN voor het programma Klant in Beeld. MT-leden hebben async feedback gegeven op deze tekst. Jij consolideert deze feedback tot concrete wijzigingsvoorstellen."
+  }
+};
+
+export function getConsolidatePrompt(stepType: string): string {
+  const ctx = STEP_TYPE_CONTEXT[stepType] || STEP_TYPE_CONTEXT.doelen;
+  return `
+Je bent een expert in het consolideren van feedback op ${ctx.itemLabel}en voor organisatieprogramma's.
+
+${CITO_CONTEXT}
+
+CONTEXT: ${ctx.description}
+
+HUIDIGE ITEMS (${ctx.label}):
+{clusters}
+
+FEEDBACK VAN MT-LEDEN:
+{suggestions}
+
+OPDRACHT:
+Analyseer alle feedback en stel concrete wijzigingen voor. Volg deze regels STRIKT:
+
+1. ALLEEN AANPASSEN WAAR FEEDBACK OVER IS
+   - Als er GEEN feedback is op een item, laat het ONGEWIJZIGD
+   - Wijzig niets zonder onderbouwing vanuit de feedback
+   - Voeg geen eigen interpretaties toe
+
+2. VERGELIJKBARE SUGGESTIES GROEPEREN
+   - Als meerdere leden dezelfde of vergelijkbare feedback geven, bundel dit tot één wijzigingsvoorstel
+   - Geen dubbelingen in de voorstellen
+   - Vermeld alle leden die aan de suggestie hebben bijgedragen
+
+3. KERNFORMULERING BEHOUDEN
+   - Herschrijf NOOIT een ${ctx.itemLabel} volledig
+   - Pas alleen aan wat de feedback concreet vraagt
+   - Behoud de structuur, stijl en terminologie van de originele tekst
+   - Kleine chirurgische aanpassingen zijn beter dan grote herschrijvingen
+
+4. BRONVERMELDING
+   - Koppel elke wijziging aan de specifieke feedback en leden die het onderbouwen
+   - Geef een heldere rationale waarom deze wijziging wordt voorgesteld
+
+5. SECTOR-NEUTRAAL
+   - Formuleringen moeten sector-overstijgend zijn
+   - Past bij "Werken aan programma's" methodiek (Prevaas & Van Loon)
+
+WIJZIGINGSTYPEN:
+- "edit": Tekstuele aanpassing van naam en/of beschrijving
+- "merge": Samenvoegen van twee of meer items (als feedback hier expliciet om vraagt)
+- "comment_only": Alleen opmerkingen, geen tekstwijziging nodig (wel documenteren)
+
+Retourneer JSON in dit formaat:
+{
+  "changes": [
+    {
+      "change_id": "change-1",
+      "cluster_id": "het item ID waarop de wijziging betrekking heeft",
+      "change_type": "edit|merge|comment_only",
+      "summary": "Korte samenvatting van de wijziging (1 zin)",
+      "rationale": "Waarom deze wijziging wordt voorgesteld, gebaseerd op de feedback",
+      "original_name": "Originele naam/titel van het item",
+      "original_description": "Originele beschrijving/tekst",
+      "proposed_name": "Voorgestelde naam (ongewijzigd als niet nodig)",
+      "proposed_description": "Voorgestelde beschrijving (ongewijzigd als niet nodig)",
+      "source_suggestions": ["suggestion IDs die deze wijziging onderbouwen"],
+      "member_sources": ["namen van leden die feedback gaven"]
+    }
+  ],
+  "unchanged_clusters": ["item IDs die ongewijzigd blijven"],
+  "consolidation_summary": "Korte samenvatting: hoeveel wijzigingen, hoeveel ongewijzigd, belangrijkste thema's in de feedback"
+}
+
+BELANGRIJK:
+- Retourneer ALLEEN geldig JSON, geen markdown of extra tekst
+- Elk item moet óf in "changes" óf in "unchanged_clusters" voorkomen
+- proposed_name en proposed_description moeten ALTIJD ingevuld zijn (ook als ongewijzigd)
+`;
+}
+
 export const QUESTION_LABELS: Record<string, string> = {
   current_situation: "Huidige situatie",
   desired_situation: "Gewenste situatie",

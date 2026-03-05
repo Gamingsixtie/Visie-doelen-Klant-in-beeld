@@ -4,6 +4,7 @@ import { useState, useEffect } from "react";
 import { useSession } from "@/lib/session-context";
 import { useToast, ConfirmDialog, ActivityTimer, TIMER_PRESETS } from "@/components/ui";
 import { RefineWithAI } from "@/components/ui/RefineWithAI";
+import { AsyncFeedbackSection } from "@/components/feedback";
 
 interface ScopeStepProps {
   onComplete: () => void;
@@ -17,7 +18,7 @@ interface ScopeItem {
 }
 
 export function ScopeStep({ onComplete, readOnly: readOnlyProp }: ScopeStepProps) {
-  const { documents, getApprovedText, saveApprovedText, removeApprovedText, updateFlowState, flowState, isViewerMode } = useSession();
+  const { documents, getApprovedText, saveApprovedText, removeApprovedText, updateFlowState, flowState, isViewerMode, currentSession } = useSession();
   const isReadOnly = readOnlyProp ?? isViewerMode;
   const { showToast } = useToast();
   const [isApproved, setIsApproved] = useState(false);
@@ -406,6 +407,21 @@ export function ScopeStep({ onComplete, readOnly: readOnlyProp }: ScopeStepProps
                 </div>
               </div>
             </div>
+
+            {/* Async feedback section */}
+            {!isReadOnly && currentSession && scopeItems.length > 0 && (
+              <AsyncFeedbackSection
+                sessionId={currentSession.id}
+                sourceData={scopeItems.map(item => ({
+                  id: item.id,
+                  name: item.text,
+                  description: item.source,
+                  goals: []
+                }))}
+                stepType="scope"
+                showToast={showToast}
+              />
+            )}
 
             {/* Action buttons */}
             {!isReadOnly && (

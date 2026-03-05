@@ -1,6 +1,6 @@
 "use client";
 
-import type { FeedbackSuggestion, SuggestionVote } from "@/lib/feedback-service";
+import type { FeedbackSuggestion, SuggestionVote, FeedbackPhase } from "@/lib/feedback-service";
 import { MT_MEMBERS } from "@/lib/types";
 
 interface ClusterData {
@@ -14,10 +14,13 @@ interface FeedbackOverviewProps {
   clusters: ClusterData[];
   suggestions: FeedbackSuggestion[];
   votes: SuggestionVote[];
-  isRoundClosed: boolean;
+  isRoundClosed?: boolean;
+  phase?: FeedbackPhase;
+  facilitatorName?: string | null;
 }
 
-export function FeedbackOverview({ clusters, suggestions, votes, isRoundClosed }: FeedbackOverviewProps) {
+export function FeedbackOverview({ clusters, suggestions, votes, isRoundClosed, phase, facilitatorName }: FeedbackOverviewProps) {
+  const effectiveIsRoundClosed = phase ? phase === "approved" : !!isRoundClosed;
   // Participation stats
   const membersWithFeedback = new Set(suggestions.map(s => s.member_name));
   const totalMembers = MT_MEMBERS.length;
@@ -50,17 +53,22 @@ export function FeedbackOverview({ clusters, suggestions, votes, isRoundClosed }
   return (
     <div className="space-y-6">
       {/* Status banner */}
-      <div className={`p-4 rounded-xl border ${isRoundClosed ? "bg-gray-50 border-gray-300" : "bg-green-50 border-green-200"}`}>
+      <div className={`p-4 rounded-xl border ${effectiveIsRoundClosed ? "bg-gray-50 border-gray-300" : "bg-green-50 border-green-200"}`}>
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className={`w-3 h-3 rounded-full ${isRoundClosed ? "bg-gray-400" : "bg-green-500 animate-pulse"}`} />
+            <div className={`w-3 h-3 rounded-full ${effectiveIsRoundClosed ? "bg-gray-400" : "bg-green-500 animate-pulse"}`} />
             <span className="font-medium text-gray-800">
-              {isRoundClosed ? "Feedbackronde gesloten" : "Feedbackronde actief"}
+              {phase === "collecting" && "Feedback verzamelen"}
+              {phase === "consolidating" && "AI consolideert feedback..."}
+              {phase === "voting" && "Stemronde actief"}
+              {phase === "approved" && "Feedbackronde afgerond"}
+              {!phase && (effectiveIsRoundClosed ? "Feedbackronde gesloten" : "Feedbackronde actief")}
             </span>
           </div>
-          <span className="text-sm text-gray-600">
-            {membersWithFeedback.size} van {totalMembers} leden hebben feedback gegeven
-          </span>
+          <div className="flex items-center gap-3 text-sm text-gray-600">
+            {facilitatorName && <span>Facilitator: {facilitatorName}</span>}
+            <span>{membersWithFeedback.size} van {totalMembers} leden hebben feedback gegeven</span>
+          </div>
         </div>
       </div>
 

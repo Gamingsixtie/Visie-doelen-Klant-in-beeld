@@ -28,6 +28,9 @@ export const MT_MEMBERS = [
   "Cornelis"
 ] as const;
 
+// Facilitator is een aparte rol - niet een MT-lid
+export const FACILITATOR_NAME = "Facilitator";
+
 // === VRAAG TYPES ===
 
 export type QuestionType =
@@ -241,7 +244,7 @@ export type VisieSubStepKey = "visie_huidige" | "visie_gewenste" | "visie_bewegi
 
 export type DoelenStepPhase = "overview" | "analyzing" | "clusters" | "voting" | "ranking" | "formulation" | "approved";
 
-export type ClusterVersionTrigger = "ai_generate" | "merge" | "re_generate";
+export type ClusterVersionTrigger = "ai_generate" | "merge" | "re_generate" | "feedback_applied";
 
 export interface ClusterVersion {
   id: string;
