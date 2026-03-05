@@ -46,7 +46,7 @@ Retourneer ALLEEN de aangepaste tekst, zonder JSON-opmaak of extra uitleg.
 `;
 
     const message = await anthropic.messages.create({
-      model: "claude-sonnet-4-20250514",
+      model: "claude-opus-4-6",
       max_tokens: 1024,
       messages: [
         {

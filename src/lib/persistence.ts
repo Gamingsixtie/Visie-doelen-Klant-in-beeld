@@ -219,17 +219,73 @@ export async function initFromSupabase(): Promise<boolean> {
       console.log(`[Supabase] Loaded ${approvedTexts.length} approved texts`);
     }
 
-    // Load flow_state from sessions into flow_states localStorage
+    // Load flow_state, generated_vision, and goal_clusters from sessions.flow_state
     if (sessionsRes.data) {
-      const flowStates = sessionsRes.data
-        .filter(s => s.flow_state && Object.keys(s.flow_state).length > 0)
-        .map(s => ({ sessionId: s.id, state: s.flow_state }));
-      if (flowStates.length > 0) {
+      const flowStatesFromDb: { sessionId: string; state: FlowState }[] = [];
+      const visionsFromDb: StoredGeneratedVision[] = [];
+      const goalClustersFromDb: { sessionId: string; clusters: unknown[]; selectedClusterIds: string[]; allVotes: Record<string, Record<string, number>>; ranking: string[]; formulations: Record<string, string>; phase: string; savedAt: Date }[] = [];
+
+      for (const s of sessionsRes.data) {
+        if (!s.flow_state || Object.keys(s.flow_state).length === 0) continue;
+        const combined = s.flow_state as Record<string, unknown>;
+
+        // Extract flowState
+        if (combined.flowState) {
+          flowStatesFromDb.push({ sessionId: s.id, state: combined.flowState as FlowState });
+        } else if (combined.currentStep) {
+          // Direct flow state (not nested)
+          flowStatesFromDb.push({ sessionId: s.id, state: combined as unknown as FlowState });
+        }
+
+        // Extract generatedVision
+        if (combined.generatedVision) {
+          const gv = combined.generatedVision as { uitgebreid: string; beknopt: string; generatedAt: string };
+          visionsFromDb.push({
+            sessionId: s.id,
+            uitgebreid: gv.uitgebreid,
+            beknopt: gv.beknopt,
+            generatedAt: new Date(gv.generatedAt)
+          });
+        }
+
+        // Extract goalClusters
+        if (combined.goalClusters) {
+          const gc = combined.goalClusters as Record<string, unknown>;
+          goalClustersFromDb.push({
+            sessionId: s.id,
+            clusters: (gc.clusters || []) as unknown[],
+            selectedClusterIds: (gc.selectedClusterIds || []) as string[],
+            allVotes: (gc.allVotes || {}) as Record<string, Record<string, number>>,
+            ranking: (gc.ranking || []) as string[],
+            formulations: (gc.formulations || {}) as Record<string, string>,
+            phase: (gc.phase || 'clusters') as string,
+            savedAt: new Date((gc.savedAt as string) || new Date().toISOString())
+          });
+        }
+      }
+
+      if (flowStatesFromDb.length > 0) {
         const localFlowStates = getFromStorage<{ sessionId: string; state: FlowState }>(STORAGE_KEYS.FLOW_STATES);
-        const sbIds = new Set(flowStates.map(f => f.sessionId));
+        const sbIds = new Set(flowStatesFromDb.map(f => f.sessionId));
         const localOnly = localFlowStates.filter(f => !sbIds.has(f.sessionId));
-        setInStorage(STORAGE_KEYS.FLOW_STATES, [...flowStates, ...localOnly]);
-        console.log(`[Supabase] Loaded ${flowStates.length} flow states`);
+        setInStorage(STORAGE_KEYS.FLOW_STATES, [...flowStatesFromDb, ...localOnly]);
+        console.log(`[Supabase] Loaded ${flowStatesFromDb.length} flow states`);
+      }
+
+      if (visionsFromDb.length > 0) {
+        const localVisions = getFromStorage<StoredGeneratedVision>(STORAGE_KEYS.GENERATED_VISION);
+        const sbIds = new Set(visionsFromDb.map(v => v.sessionId));
+        const localOnly = localVisions.filter(v => !sbIds.has(v.sessionId));
+        setInStorage(STORAGE_KEYS.GENERATED_VISION, [...visionsFromDb, ...localOnly]);
+        console.log(`[Supabase] Loaded ${visionsFromDb.length} generated visions`);
+      }
+
+      if (goalClustersFromDb.length > 0) {
+        const localClusters = getFromStorage<{ sessionId: string }>(STORAGE_KEYS.GOAL_CLUSTERS);
+        const sbIds = new Set(goalClustersFromDb.map(g => g.sessionId));
+        const localOnly = localClusters.filter(g => !sbIds.has(g.sessionId));
+        setInStorage(STORAGE_KEYS.GOAL_CLUSTERS, [...goalClustersFromDb, ...localOnly]);
+        console.log(`[Supabase] Loaded ${goalClustersFromDb.length} goal clusters`);
       }
     }
 
@@ -733,14 +789,33 @@ export function getFinalDocument(sessionId: string): StoredFinalDocument | null 
 
 // === FLOW STATE ===
 
+// Sync flowState + generatedVision + goalClusters as combined object to sessions.flow_state
+function syncExtraDataToSupabase(sessionId: string): void {
+  const combined: Record<string, unknown> = {};
+
+  const flowStates = getFromStorage<{ sessionId: string; state: FlowState }>(STORAGE_KEYS.FLOW_STATES);
+  const fs = flowStates.find(f => f.sessionId === sessionId);
+  if (fs) combined.flowState = fs.state;
+
+  const visions = getFromStorage<StoredGeneratedVision>(STORAGE_KEYS.GENERATED_VISION);
+  const vision = visions.find(v => v.sessionId === sessionId);
+  if (vision) combined.generatedVision = { uitgebreid: vision.uitgebreid, beknopt: vision.beknopt, generatedAt: vision.generatedAt };
+
+  const goalData = getFromStorage<{ sessionId: string; clusters: unknown[]; selectedClusterIds: string[]; allVotes: Record<string, Record<string, number>>; ranking: string[]; formulations: Record<string, string>; phase: string; savedAt: Date }>(STORAGE_KEYS.GOAL_CLUSTERS);
+  const gc = goalData.find(g => g.sessionId === sessionId);
+  if (gc) combined.goalClusters = { clusters: gc.clusters, selectedClusterIds: gc.selectedClusterIds, allVotes: gc.allVotes, ranking: gc.ranking, formulations: gc.formulations, phase: gc.phase, savedAt: gc.savedAt };
+
+  sbUpdate('sessions', sessionId, { flow_state: combined });
+}
+
 export function saveFlowState(sessionId: string, state: FlowState): void {
   const flowStates = getFromStorage<{ sessionId: string; state: FlowState }>(STORAGE_KEYS.FLOW_STATES);
   const filtered = flowStates.filter((f) => f.sessionId !== sessionId);
   filtered.push({ sessionId, state });
   setInStorage(STORAGE_KEYS.FLOW_STATES, filtered);
 
-  // Sync to Supabase via sessions.flow_state column
-  sbUpdate('sessions', sessionId, { flow_state: state });
+  // Sync combined data to Supabase via sessions.flow_state column
+  syncExtraDataToSupabase(sessionId);
 }
 
 export function getFlowState(sessionId: string): FlowState | null {
@@ -831,6 +906,9 @@ export function saveGeneratedVision(
   filtered.push(vision);
   setInStorage(STORAGE_KEYS.GENERATED_VISION, filtered);
 
+  // Sync to Supabase via sessions.flow_state
+  syncExtraDataToSupabase(sessionId);
+
   return vision;
 }
 
@@ -896,6 +974,9 @@ export function saveGoalClusters(
     allData.push(stored);
   }
   setInStorage(STORAGE_KEYS.GOAL_CLUSTERS, allData);
+
+  // Sync to Supabase via sessions.flow_state
+  syncExtraDataToSupabase(sessionId);
 }
 
 export function getGoalClusters(sessionId: string): StoredGoalClusterData | null {
