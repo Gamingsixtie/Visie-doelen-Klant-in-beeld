@@ -83,10 +83,18 @@ export function SessionProvider({ children }: SessionProviderProps) {
   const [syncState, setSyncState] = useState<SyncState>(getInitialSyncState());
   const { triggerSave } = useSaveStatus();
 
-  // Load existing sessions on mount
+  // Load existing sessions on mount - first sync from Supabase, then load
   useEffect(() => {
-    refreshSessions();
-    setIsLoading(false);
+    async function init() {
+      try {
+        await persistence.initFromSupabase();
+      } catch (e) {
+        console.error("Failed to init from Supabase:", e);
+      }
+      refreshSessions();
+      setIsLoading(false);
+    }
+    init();
   }, []);
 
   const refreshSessions = useCallback(() => {

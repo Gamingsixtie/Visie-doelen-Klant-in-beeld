@@ -1,6 +1,6 @@
 // ============================================
 // DATA PERSISTENCE LAYER
-// LocalStorage-based persistence for sessions and data
+// Dual persistence: localStorage (fast cache) + Supabase (primary storage)
 // ============================================
 
 import { v4 as uuidv4 } from "uuid";
@@ -55,6 +55,192 @@ function parseDate(dateStr: string | Date): Date {
   return typeof dateStr === "string" ? new Date(dateStr) : dateStr;
 }
 
+// ============================================
+// SUPABASE SYNC HELPERS
+// Fire-and-forget: write to Supabase in background
+// ============================================
+
+function sbInsert(table: string, data: Record<string, unknown>) {
+  if (!isSupabaseConfigured() || !supabase) return;
+  supabase.from(table).insert(data).then(({ error }) => {
+    if (error) console.error(`[Supabase] insert ${table}:`, error.message);
+  });
+}
+
+function sbUpsert(table: string, data: Record<string, unknown>) {
+  if (!isSupabaseConfigured() || !supabase) return;
+  supabase.from(table).upsert(data).then(({ error }) => {
+    if (error) console.error(`[Supabase] upsert ${table}:`, error.message);
+  });
+}
+
+function sbUpdate(table: string, id: string, data: Record<string, unknown>) {
+  if (!isSupabaseConfigured() || !supabase) return;
+  supabase.from(table).update(data).eq('id', id).then(({ error }) => {
+    if (error) console.error(`[Supabase] update ${table}:`, error.message);
+  });
+}
+
+function sbDelete(table: string, id: string) {
+  if (!isSupabaseConfigured() || !supabase) return;
+  supabase.from(table).delete().eq('id', id).then(({ error }) => {
+    if (error) console.error(`[Supabase] delete ${table}:`, error.message);
+  });
+}
+
+function sbDeleteBySession(table: string, sessionId: string) {
+  if (!isSupabaseConfigured() || !supabase) return;
+  supabase.from(table).delete().eq('session_id', sessionId).then(({ error }) => {
+    if (error) console.error(`[Supabase] delete ${table} by session:`, error.message);
+  });
+}
+
+// ============================================
+// INIT FROM SUPABASE
+// Load all data from Supabase into localStorage on app start
+// ============================================
+
+export async function initFromSupabase(): Promise<boolean> {
+  if (!isSupabaseConfigured() || !supabase) return false;
+
+  try {
+    console.log('[Supabase] Loading data from Supabase...');
+
+    // Fetch all data in parallel
+    const [sessionsRes, documentsRes, analysesRes, proposalsRes, votesRes, approvedTextsRes] = await Promise.all([
+      supabase.from('sessions').select('*').order('created_at', { ascending: false }),
+      supabase.from('documents').select('*').order('uploaded_at', { ascending: true }),
+      supabase.from('analyses').select('*'),
+      supabase.from('proposals').select('*').order('created_at', { ascending: true }),
+      supabase.from('votes').select('*').order('voted_at', { ascending: true }),
+      supabase.from('approved_texts').select('*')
+    ]);
+
+    // Map Supabase data to localStorage format and store
+    if (sessionsRes.data && sessionsRes.data.length > 0) {
+      const sessions = sessionsRes.data.map(s => ({
+        id: s.id,
+        name: s.name,
+        createdAt: s.created_at,
+        updatedAt: s.updated_at,
+        status: s.status,
+        currentStep: s.current_step
+      }));
+      // Merge: Supabase data takes priority, keep local-only sessions
+      const localSessions = getFromStorage<StoredSession>(STORAGE_KEYS.SESSIONS);
+      const supabaseIds = new Set(sessions.map(s => s.id));
+      const localOnly = localSessions.filter(s => !supabaseIds.has(s.id));
+      setInStorage(STORAGE_KEYS.SESSIONS, [...sessions, ...localOnly]);
+      console.log(`[Supabase] Loaded ${sessions.length} sessions`);
+    }
+
+    if (documentsRes.data && documentsRes.data.length > 0) {
+      const documents = documentsRes.data.map(d => ({
+        id: d.id,
+        sessionId: d.session_id,
+        filename: d.filename,
+        respondentId: d.respondent_id,
+        uploadedAt: d.uploaded_at,
+        rawText: d.raw_text,
+        parsedResponses: d.parsed_responses
+      }));
+      const localDocs = getFromStorage<StoredDocument>(STORAGE_KEYS.DOCUMENTS);
+      const sbIds = new Set(documents.map(d => d.id));
+      const localOnly = localDocs.filter(d => !sbIds.has(d.id));
+      setInStorage(STORAGE_KEYS.DOCUMENTS, [...documents, ...localOnly]);
+      console.log(`[Supabase] Loaded ${documents.length} documents`);
+    }
+
+    if (analysesRes.data && analysesRes.data.length > 0) {
+      const analyses = analysesRes.data.map(a => ({
+        id: a.id,
+        sessionId: a.session_id,
+        questionType: a.question_type,
+        analyzedAt: a.analyzed_at,
+        themes: a.themes,
+        quickWins: a.quick_wins,
+        discussionPoints: a.discussion_points
+      }));
+      const localAnalyses = getFromStorage<StoredAnalysis>(STORAGE_KEYS.ANALYSES);
+      const sbIds = new Set(analyses.map(a => a.id));
+      const localOnly = localAnalyses.filter(a => !sbIds.has(a.id));
+      setInStorage(STORAGE_KEYS.ANALYSES, [...analyses, ...localOnly]);
+      console.log(`[Supabase] Loaded ${analyses.length} analyses`);
+    }
+
+    if (proposalsRes.data && proposalsRes.data.length > 0) {
+      const proposals = proposalsRes.data.map(p => ({
+        id: p.id,
+        sessionId: p.session_id,
+        questionType: p.question_type,
+        themeId: p.theme_id || undefined,
+        variants: p.variants,
+        status: p.status,
+        createdAt: p.created_at,
+        approvedAt: p.approved_at || undefined,
+        approvedVariantId: p.approved_variant_id || undefined
+      }));
+      const localProposals = getFromStorage<StoredProposal>(STORAGE_KEYS.PROPOSALS);
+      const sbIds = new Set(proposals.map(p => p.id));
+      const localOnly = localProposals.filter(p => !sbIds.has(p.id));
+      setInStorage(STORAGE_KEYS.PROPOSALS, [...proposals, ...localOnly]);
+      console.log(`[Supabase] Loaded ${proposals.length} proposals`);
+    }
+
+    if (votesRes.data && votesRes.data.length > 0) {
+      const votes = votesRes.data.map(v => ({
+        id: v.id,
+        sessionId: v.session_id,
+        proposalId: v.proposal_id,
+        variantId: v.variant_id,
+        respondentId: v.respondent_id,
+        value: v.value,
+        comment: v.comment || undefined,
+        votedAt: v.voted_at
+      }));
+      setInStorage(STORAGE_KEYS.VOTES, votes);
+      console.log(`[Supabase] Loaded ${votes.length} votes`);
+    }
+
+    if (approvedTextsRes.data && approvedTextsRes.data.length > 0) {
+      const approvedTexts = approvedTextsRes.data.map(t => ({
+        id: t.id,
+        sessionId: t.session_id,
+        questionType: t.question_type,
+        text: t.text,
+        approvedAt: t.approved_at,
+        basedOnProposalId: t.based_on_proposal_id,
+        basedOnVariantId: t.based_on_variant_id
+      }));
+      const localTexts = getFromStorage<StoredApprovedText>(STORAGE_KEYS.APPROVED_TEXTS);
+      const sbIds = new Set(approvedTexts.map(t => t.id));
+      const localOnly = localTexts.filter(t => !sbIds.has(t.id));
+      setInStorage(STORAGE_KEYS.APPROVED_TEXTS, [...approvedTexts, ...localOnly]);
+      console.log(`[Supabase] Loaded ${approvedTexts.length} approved texts`);
+    }
+
+    // Load flow_state from sessions into flow_states localStorage
+    if (sessionsRes.data) {
+      const flowStates = sessionsRes.data
+        .filter(s => s.flow_state && Object.keys(s.flow_state).length > 0)
+        .map(s => ({ sessionId: s.id, state: s.flow_state }));
+      if (flowStates.length > 0) {
+        const localFlowStates = getFromStorage<{ sessionId: string; state: FlowState }>(STORAGE_KEYS.FLOW_STATES);
+        const sbIds = new Set(flowStates.map(f => f.sessionId));
+        const localOnly = localFlowStates.filter(f => !sbIds.has(f.sessionId));
+        setInStorage(STORAGE_KEYS.FLOW_STATES, [...flowStates, ...localOnly]);
+        console.log(`[Supabase] Loaded ${flowStates.length} flow states`);
+      }
+    }
+
+    console.log('[Supabase] Data loading complete');
+    return true;
+  } catch (error) {
+    console.error('[Supabase] Failed to load data:', error);
+    return false;
+  }
+}
+
 // === SESSION ===
 
 export function createSession(name: string): StoredSession {
@@ -71,26 +257,17 @@ export function createSession(name: string): StoredSession {
   sessions.push(session);
   setInStorage(STORAGE_KEYS.SESSIONS, sessions);
 
-  return session;
-}
+  // Sync to Supabase
+  sbInsert('sessions', {
+    id: session.id,
+    name: session.name,
+    status: session.status,
+    current_step: session.currentStep,
+    created_at: session.createdAt.toISOString(),
+    updated_at: session.updatedAt.toISOString()
+  });
 
-// Sync function for Supabase
-function syncToSupabase(table: string, data: Record<string, unknown>, operation = 'insert') {
-  if (isSupabaseConfigured() && supabase) {
-    if (operation === 'insert') {
-      supabase.from(table).insert(data).then(({ error }: { error: unknown }) => {
-        if (error) console.error('Supabase sync error:', error);
-      });
-    } else if (operation === 'update') {
-      supabase.from(table).update(data.updates).eq('id', data.id).then(({ error }: { error: unknown }) => {
-        if (error) console.error('Supabase sync error:', error);
-      });
-    } else if (operation === 'delete') {
-      supabase.from(table).delete().eq('id', data.id).then(({ error }: { error: unknown }) => {
-        if (error) console.error('Supabase sync error:', error);
-      });
-    }
-  }
+  return session;
 }
 
 export function getSession(id: string): StoredSession | null {
@@ -130,11 +307,19 @@ export function updateSession(id: string, updates: Partial<StoredSession>): void
       updatedAt: new Date()
     };
     setInStorage(STORAGE_KEYS.SESSIONS, sessions);
+
+    // Sync to Supabase
+    const dbUpdates: Record<string, unknown> = {};
+    if (updates.name) dbUpdates.name = updates.name;
+    if (updates.status) dbUpdates.status = updates.status;
+    if (updates.currentStep) dbUpdates.current_step = updates.currentStep;
+    sbUpdate('sessions', id, dbUpdates);
   }
 }
 
 export function updateSessionStep(id: string, step: FlowStep): void {
   updateSession(id, { currentStep: step });
+  sbUpdate('sessions', id, { current_step: step });
 }
 
 export function listSessions(): StoredSession[] {
@@ -204,6 +389,9 @@ export function deleteSession(id: string): void {
     STORAGE_KEYS.FLOW_STATES,
     flowStates.filter((f) => f.sessionId !== id)
   );
+
+  // Sync deletion to Supabase (cascade deletes handle related data)
+  sbDelete('sessions', id);
 }
 
 // === DOCUMENTS ===
@@ -218,6 +406,18 @@ export function saveDocument(sessionId: string, doc: Omit<StoredDocument, "id" |
   const documents = getFromStorage<StoredDocument>(STORAGE_KEYS.DOCUMENTS);
   documents.push(newDoc);
   setInStorage(STORAGE_KEYS.DOCUMENTS, documents);
+
+  // Sync to Supabase
+  sbInsert('documents', {
+    id: newDoc.id,
+    session_id: sessionId,
+    filename: newDoc.filename,
+    respondent_id: newDoc.respondentId,
+    respondent_name: newDoc.respondentId,
+    raw_text: newDoc.rawText,
+    uploaded_at: newDoc.uploadedAt instanceof Date ? newDoc.uploadedAt.toISOString() : newDoc.uploadedAt,
+    parsed_responses: newDoc.parsedResponses
+  });
 
   return newDoc;
 }
@@ -238,6 +438,7 @@ export function deleteDocument(id: string): void {
     STORAGE_KEYS.DOCUMENTS,
     documents.filter((d) => d.id !== id)
   );
+  sbDelete('documents', id);
 }
 
 export function updateDocument(id: string, updates: Partial<StoredDocument>): void {
@@ -249,6 +450,10 @@ export function updateDocument(id: string, updates: Partial<StoredDocument>): vo
       ...updates
     };
     setInStorage(STORAGE_KEYS.DOCUMENTS, documents);
+
+    if (updates.parsedResponses) {
+      sbUpdate('documents', id, { parsed_responses: updates.parsedResponses });
+    }
   }
 }
 
@@ -268,6 +473,17 @@ export function saveAnalysis(sessionId: string, analysis: Omit<StoredAnalysis, "
   );
   filtered.push(newAnalysis);
   setInStorage(STORAGE_KEYS.ANALYSES, filtered);
+
+  // Sync to Supabase (upsert by session_id + question_type)
+  sbUpsert('analyses', {
+    id: newAnalysis.id,
+    session_id: sessionId,
+    question_type: newAnalysis.questionType,
+    analyzed_at: newAnalysis.analyzedAt instanceof Date ? newAnalysis.analyzedAt.toISOString() : newAnalysis.analyzedAt,
+    themes: newAnalysis.themes || [],
+    quick_wins: newAnalysis.quickWins || [],
+    discussion_points: newAnalysis.discussionPoints || []
+  });
 
   return newAnalysis;
 }
@@ -299,6 +515,17 @@ export function saveProposal(sessionId: string, proposal: Omit<StoredProposal, "
   proposals.push(newProposal);
   setInStorage(STORAGE_KEYS.PROPOSALS, proposals);
 
+  // Sync to Supabase
+  sbInsert('proposals', {
+    id: newProposal.id,
+    session_id: sessionId,
+    question_type: newProposal.questionType,
+    theme_id: newProposal.themeId || null,
+    variants: newProposal.variants,
+    status: newProposal.status,
+    created_at: newProposal.createdAt instanceof Date ? newProposal.createdAt.toISOString() : newProposal.createdAt
+  });
+
   return newProposal;
 }
 
@@ -317,6 +544,14 @@ export function updateProposalStatus(
       approvedAt: status === "approved" ? new Date() : undefined
     };
     setInStorage(STORAGE_KEYS.PROPOSALS, proposals);
+
+    // Sync to Supabase
+    const dbUpdates: Record<string, unknown> = { status };
+    if (approvedVariantId) {
+      dbUpdates.approved_variant_id = approvedVariantId;
+      dbUpdates.approved_at = new Date().toISOString();
+    }
+    sbUpdate('proposals', id, dbUpdates);
   }
 }
 
@@ -353,6 +588,18 @@ export function saveVote(sessionId: string, vote: Omit<StoredVote, "id" | "sessi
   );
   filtered.push(newVote);
   setInStorage(STORAGE_KEYS.VOTES, filtered);
+
+  // Sync to Supabase
+  sbUpsert('votes', {
+    id: newVote.id,
+    session_id: sessionId,
+    proposal_id: newVote.proposalId,
+    variant_id: newVote.variantId,
+    respondent_id: newVote.respondentId,
+    value: newVote.value,
+    comment: newVote.comment || null,
+    voted_at: newVote.votedAt instanceof Date ? newVote.votedAt.toISOString() : newVote.votedAt
+  });
 
   return newVote;
 }
@@ -397,15 +644,33 @@ export function saveApprovedText(
   filtered.push(newText);
   setInStorage(STORAGE_KEYS.APPROVED_TEXTS, filtered);
 
+  // Sync to Supabase
+  sbUpsert('approved_texts', {
+    id: newText.id,
+    session_id: sessionId,
+    question_type: newText.questionType,
+    text: newText.text,
+    approved_at: newText.approvedAt instanceof Date ? newText.approvedAt.toISOString() : newText.approvedAt,
+    based_on_proposal_id: null,
+    based_on_variant_id: newText.basedOnVariantId
+  });
+
   return newText;
 }
 
 export function deleteApprovedText(sessionId: string, questionType: QuestionType): void {
   const approvedTexts = getFromStorage<StoredApprovedText>(STORAGE_KEYS.APPROVED_TEXTS);
+  const toDelete = approvedTexts.find(
+    (t) => t.sessionId === sessionId && t.questionType === questionType
+  );
   const filtered = approvedTexts.filter(
     (t) => !(t.sessionId === sessionId && t.questionType === questionType)
   );
   setInStorage(STORAGE_KEYS.APPROVED_TEXTS, filtered);
+
+  if (toDelete) {
+    sbDelete('approved_texts', toDelete.id);
+  }
 }
 
 export function getApprovedText(sessionId: string, questionType: QuestionType): StoredApprovedText | null {
@@ -473,6 +738,9 @@ export function saveFlowState(sessionId: string, state: FlowState): void {
   const filtered = flowStates.filter((f) => f.sessionId !== sessionId);
   filtered.push({ sessionId, state });
   setInStorage(STORAGE_KEYS.FLOW_STATES, filtered);
+
+  // Sync to Supabase via sessions.flow_state column
+  sbUpdate('sessions', sessionId, { flow_state: state });
 }
 
 export function getFlowState(sessionId: string): FlowState | null {
