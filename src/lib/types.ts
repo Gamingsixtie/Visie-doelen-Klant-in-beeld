@@ -241,6 +241,17 @@ export type VisieSubStepKey = "visie_huidige" | "visie_gewenste" | "visie_bewegi
 
 export type DoelenStepPhase = "overview" | "analyzing" | "clusters" | "voting" | "ranking" | "formulation" | "approved";
 
+export type ClusterVersionTrigger = "ai_generate" | "merge" | "re_generate";
+
+export interface ClusterVersion {
+  id: string;
+  sessionId: string;
+  clusters: unknown[];
+  createdAt: Date;
+  label: string;
+  trigger: ClusterVersionTrigger;
+}
+
 export interface DoelenStepSyncState {
   phase: DoelenStepPhase;
   clusters: Array<{

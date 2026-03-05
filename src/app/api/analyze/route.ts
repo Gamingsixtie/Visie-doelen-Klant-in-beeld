@@ -35,10 +35,14 @@ export async function POST(request: NextRequest) {
       .replace("{questionType}", QUESTION_LABELS[questionType] || questionType)
       .replace("{responses}", formattedResponses);
 
-    // Call Claude API
+    // Call Claude API with extended thinking
     const message = await anthropic.messages.create({
-      model: "claude-opus-4-6",
-      max_tokens: 4096,
+      model: "claude-sonnet-4-6",
+      max_tokens: 16000,
+      thinking: {
+        type: "enabled",
+        budget_tokens: 10000
+      },
       messages: [
         {
           role: "user",
@@ -47,9 +51,9 @@ export async function POST(request: NextRequest) {
       ]
     });
 
-    // Extract text content from response
-    const responseText =
-      message.content[0].type === "text" ? message.content[0].text : "";
+    // Extract text content from response (skip thinking blocks)
+    const textBlock = message.content.find((block: { type: string }) => block.type === "text");
+    const responseText = textBlock && "text" in textBlock ? textBlock.text : "";
 
     // Parse JSON from response
     let analysisData;

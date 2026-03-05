@@ -212,6 +212,81 @@ export interface Database {
           based_on_variant_id?: string;
         };
       };
+      feedback_rounds: {
+        Row: {
+          id: string;
+          session_id: string;
+          source_clusters: Json;
+          status: "open" | "closed";
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          session_id: string;
+          source_clusters: Json;
+          status?: "open" | "closed";
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          session_id?: string;
+          source_clusters?: Json;
+          status?: "open" | "closed";
+          created_at?: string;
+        };
+      };
+      feedback_suggestions: {
+        Row: {
+          id: string;
+          round_id: string;
+          member_name: string;
+          cluster_id: string;
+          suggestion_type: "priority" | "text_edit" | "merge" | "comment";
+          content: Json;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          round_id: string;
+          member_name: string;
+          cluster_id: string;
+          suggestion_type: "priority" | "text_edit" | "merge" | "comment";
+          content: Json;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          round_id?: string;
+          member_name?: string;
+          cluster_id?: string;
+          suggestion_type?: "priority" | "text_edit" | "merge" | "comment";
+          content?: Json;
+          created_at?: string;
+        };
+      };
+      suggestion_votes: {
+        Row: {
+          id: string;
+          suggestion_id: string;
+          member_name: string;
+          value: "accept" | "reject";
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          suggestion_id: string;
+          member_name: string;
+          value: "accept" | "reject";
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          suggestion_id?: string;
+          member_name?: string;
+          value?: "accept" | "reject";
+          created_at?: string;
+        };
+      };
     };
     Views: Record<string, never>;
     Functions: Record<string, never>;

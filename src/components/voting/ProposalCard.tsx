@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import type { ProposalVariant, Vote, VoteValue } from "@/lib/types";
 import { VoteButtons } from "./VoteButtons";
 import { ConsentBadge } from "./ConsentStatus";
@@ -41,6 +41,11 @@ export function ProposalCard({
 }: ProposalCardProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [editedText, setEditedText] = useState(variant.text);
+
+  // Sync editedText when variant.text changes (e.g., after AI refinement)
+  useEffect(() => {
+    setEditedText(variant.text);
+  }, [variant.text]);
 
   const handleSaveEdit = () => {
     if (onEdit) {

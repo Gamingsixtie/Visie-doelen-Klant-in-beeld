@@ -43,10 +43,14 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Use Claude to extract structured data
+    // Use Claude to extract structured data with extended thinking
     const message = await anthropic.messages.create({
-      model: "claude-opus-4-6",
-      max_tokens: 2048,
+      model: "claude-sonnet-4-6",
+      max_tokens: 10000,
+      thinking: {
+        type: "enabled",
+        budget_tokens: 5000
+      },
       messages: [
         {
           role: "user",
@@ -55,9 +59,9 @@ export async function POST(request: NextRequest) {
       ]
     });
 
-    // Extract text content from response
-    const responseText =
-      message.content[0].type === "text" ? message.content[0].text : "";
+    // Extract text content from response (skip thinking blocks)
+    const textBlock = message.content.find((block: { type: string }) => block.type === "text");
+    const responseText = textBlock && "text" in textBlock ? textBlock.text : "";
 
     // Parse JSON from response
     let parsedData;

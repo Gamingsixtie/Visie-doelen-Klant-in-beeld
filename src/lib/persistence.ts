@@ -16,7 +16,9 @@ import type {
   FlowStep,
   QuestionType,
   FlowState,
-  getInitialFlowState
+  getInitialFlowState,
+  ClusterVersion,
+  ClusterVersionTrigger
 } from "./types";
 
 // Storage keys
@@ -30,7 +32,8 @@ const STORAGE_KEYS = {
   FINAL_DOCUMENTS: "kib_final_documents",
   FLOW_STATES: "kib_flow_states",
   GENERATED_VISION: "kib_generated_vision",
-  GOAL_CLUSTERS: "kib_goal_clusters"
+  GOAL_CLUSTERS: "kib_goal_clusters",
+  GOAL_CLUSTER_VERSIONS: "kib_goal_cluster_versions"
 };
 
 // === HELPER FUNCTIONS ===
@@ -261,6 +264,18 @@ export async function initFromSupabase(): Promise<boolean> {
             phase: (gc.phase || 'clusters') as string,
             savedAt: new Date((gc.savedAt as string) || new Date().toISOString())
           });
+        }
+
+        // Extract goalClusterVersions
+        if (combined.goalClusterVersions && Array.isArray(combined.goalClusterVersions)) {
+          const versions = combined.goalClusterVersions as ClusterVersion[];
+          const existing = getFromStorage<ClusterVersion>(STORAGE_KEYS.GOAL_CLUSTER_VERSIONS);
+          const existingIds = new Set(existing.map(v => v.id));
+          const newVersions = versions.filter(v => !existingIds.has(v.id));
+          if (newVersions.length > 0) {
+            setInStorage(STORAGE_KEYS.GOAL_CLUSTER_VERSIONS, [...existing, ...newVersions]);
+            console.log(`[Supabase] Loaded ${newVersions.length} cluster versions for session ${s.id}`);
+          }
         }
       }
 
@@ -805,6 +820,10 @@ function syncExtraDataToSupabase(sessionId: string): void {
   const gc = goalData.find(g => g.sessionId === sessionId);
   if (gc) combined.goalClusters = { clusters: gc.clusters, selectedClusterIds: gc.selectedClusterIds, allVotes: gc.allVotes, ranking: gc.ranking, formulations: gc.formulations, phase: gc.phase, savedAt: gc.savedAt };
 
+  // Include cluster versions
+  const versions = getFromStorage<ClusterVersion>(STORAGE_KEYS.GOAL_CLUSTER_VERSIONS).filter(v => v.sessionId === sessionId);
+  if (versions.length > 0) combined.goalClusterVersions = versions;
+
   sbUpdate('sessions', sessionId, { flow_state: combined });
 }
 
@@ -989,4 +1008,42 @@ export function getGoalClusters(sessionId: string): StoredGoalClusterData | null
     };
   }
   return null;
+}
+
+// === GOAL CLUSTER VERSIONS (append-only history) ===
+
+export function saveClusterVersion(
+  sessionId: string,
+  clusters: unknown[],
+  label: string,
+  trigger: ClusterVersionTrigger
+): ClusterVersion {
+  const version: ClusterVersion = {
+    id: uuidv4(),
+    sessionId,
+    clusters,
+    createdAt: new Date(),
+    label,
+    trigger
+  };
+
+  const allVersions = getFromStorage<ClusterVersion>(STORAGE_KEYS.GOAL_CLUSTER_VERSIONS);
+  allVersions.push(version);
+  setInStorage(STORAGE_KEYS.GOAL_CLUSTER_VERSIONS, allVersions);
+
+  // Sync to Supabase via sessions.flow_state
+  syncExtraDataToSupabase(sessionId);
+
+  return version;
+}
+
+export function getClusterVersions(sessionId: string): ClusterVersion[] {
+  const allVersions = getFromStorage<ClusterVersion>(STORAGE_KEYS.GOAL_CLUSTER_VERSIONS);
+  return allVersions
+    .filter((v) => v.sessionId === sessionId)
+    .map((v) => ({
+      ...v,
+      createdAt: parseDate(v.createdAt)
+    }))
+    .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
 }
