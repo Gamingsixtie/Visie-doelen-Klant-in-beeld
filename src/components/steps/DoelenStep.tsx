@@ -17,6 +17,7 @@ import type { ThemeCluster, DoelenStepPhase, ClusterVersion } from "@/lib/types"
 import { RefineWithAI } from "@/components/ui/RefineWithAI";
 import { MT_MEMBERS, FACILITATOR_NAME } from "@/lib/types";
 import * as persistence from "@/lib/persistence";
+import { updateActiveRoundSourceClusters } from "@/lib/feedback-service";
 
 interface DoelenStepProps {
   onComplete: () => void;
@@ -108,10 +109,9 @@ export function DoelenStep({ onComplete, readOnly: readOnlyProp }: DoelenStepPro
 
   // Check if already approved
   useEffect(() => {
+    // Check if at least 1 goal is approved (any number from 1-5 is valid)
     const approved1 = getApprovedText("goal_1");
-    const approved2 = getApprovedText("goal_2");
-    const approved3 = getApprovedText("goal_3");
-    if (approved1 && approved2 && approved3) {
+    if (approved1) {
       setPhase("approved");
     }
   }, [getApprovedText]);
@@ -161,6 +161,12 @@ export function DoelenStep({ onComplete, readOnly: readOnlyProp }: DoelenStepPro
       phase
     });
   }, [currentSession, clusters, selectedClusterIds, allVotes, ranking, formulations, phase, isReadOnly]);
+
+  // Sync clusters to active feedback round when clusters change
+  useEffect(() => {
+    if (!currentSession || isReadOnly || clusters.length === 0) return;
+    updateActiveRoundSourceClusters(currentSession.id, clusters, "doelen");
+  }, [currentSession, clusters, isReadOnly]);
 
   // Set initial voter to first MT member (only if not already set and not in viewer mode)
   useEffect(() => {
@@ -396,6 +402,13 @@ export function DoelenStep({ onComplete, readOnly: readOnlyProp }: DoelenStepPro
       )
     );
     showToast("Subdoel bijgewerkt", "success");
+  };
+
+  // Delete cluster handler
+  const handleDeleteCluster = (clusterId: string) => {
+    setClusters((prev) => prev.filter((c) => c.id !== clusterId));
+    setSelectedClusterIds((prev) => prev.filter((id) => id !== clusterId));
+    showToast("Doel verwijderd", "info");
   };
 
   // Merge handlers
@@ -814,9 +827,10 @@ export function DoelenStep({ onComplete, readOnly: readOnlyProp }: DoelenStepPro
     updatedClusters.sort((a, b) => b.votes - a.votes);
     setClusters(updatedClusters);
 
-    // Pre-select top 5 based on votes (or all if less than 5)
-    const maxToSelect = Math.min(updatedClusters.length, 5);
-    const topIds = updatedClusters.slice(0, maxToSelect).map((c) => c.id);
+    // Pre-select only clusters that received votes, max 5
+    const clustersWithVotes = updatedClusters.filter(c => c.votes > 0);
+    const maxToSelect = Math.min(clustersWithVotes.length, 5);
+    const topIds = clustersWithVotes.slice(0, maxToSelect).map((c) => c.id);
     setRanking(topIds);
 
     setPhase("ranking");
@@ -934,7 +948,7 @@ export function DoelenStep({ onComplete, readOnly: readOnlyProp }: DoelenStepPro
             Doelen bepalen
           </h1>
           <p className="text-gray-600">
-            Analyseer alle doelen en bepaal gezamenlijk de top 3-5.
+            Analyseer alle doelen en bepaal gezamenlijk de top 5 (of minder, afhankelijk van stemmen).
           </p>
 
           {/* Phase indicator */}
@@ -1333,6 +1347,7 @@ export function DoelenStep({ onComplete, readOnly: readOnlyProp }: DoelenStepPro
                 onToggleMergeSelect={handleToggleMergeSelect}
                 onUndoMerge={handleUndoMerge}
                 onMergeInto={handleMergeInto}
+                onDeleteCluster={handleDeleteCluster}
               />
 
               {/* Add new goal button/form */}

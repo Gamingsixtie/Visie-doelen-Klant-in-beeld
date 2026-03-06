@@ -8,6 +8,7 @@ import type { GoalClusterType } from "@/components/doelen";
 import { MT_MEMBERS, FACILITATOR_NAME } from "@/lib/types";
 import { supabase } from "@/lib/supabase";
 import * as dotVotingService from "@/lib/dot-voting-service";
+import * as persistence from "@/lib/persistence";
 
 const TOTAL_DOTS = 5;
 
@@ -198,6 +199,17 @@ export default function StemmenPage() {
         }
       })
       .eq("id", sessionId);
+
+    // Also update localStorage so DoelenStep picks up the votes
+    const existingData = persistence.getGoalClusters(sessionId);
+    persistence.saveGoalClusters(sessionId, {
+      clusters: updatedClusters,
+      selectedClusterIds: existingData?.selectedClusterIds || [],
+      allVotes: freshVotes,
+      ranking: existingData?.ranking || [],
+      formulations: existingData?.formulations || {},
+      phase: "voting"
+    });
 
     router.push(`/sessies/${sessionId}`);
   };

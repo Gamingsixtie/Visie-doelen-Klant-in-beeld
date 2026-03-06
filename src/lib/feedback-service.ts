@@ -730,3 +730,28 @@ export async function unmarkMemberReady(roundId: string, memberName: string): Pr
   }
   return true;
 }
+
+// === Update source clusters when doelen change ===
+
+export async function updateActiveRoundSourceClusters(
+  sessionId: string,
+  newClusters: unknown[],
+  stepType: FeedbackStepType = "doelen"
+): Promise<boolean> {
+  if (!isSupabaseConfigured() || !supabase) return false;
+
+  // Find active round for this step type
+  const activeRound = await getActiveRound(sessionId, stepType);
+  if (!activeRound) return false;
+
+  const { error } = await supabase
+    .from("feedback_rounds")
+    .update({ source_clusters: newClusters as unknown as Record<string, unknown> })
+    .eq("id", activeRound.id);
+
+  if (error) {
+    console.error("Error updating source clusters:", error);
+    return false;
+  }
+  return true;
+}

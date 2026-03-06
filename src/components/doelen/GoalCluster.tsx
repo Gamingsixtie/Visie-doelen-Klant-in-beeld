@@ -740,6 +740,8 @@ interface GoalClusterListProps {
   onUndoMerge?: (clusterId: string) => void;
   // Quick merge into another cluster
   onMergeInto?: (sourceClusterId: string, targetClusterId: string) => Promise<void>;
+  // Delete cluster
+  onDeleteCluster?: (clusterId: string) => void;
 }
 
 export function GoalClusterList({
@@ -757,7 +759,8 @@ export function GoalClusterList({
   mergeSelectedIds = [],
   onToggleMergeSelect,
   onUndoMerge,
-  onMergeInto
+  onMergeInto,
+  onDeleteCluster
 }: GoalClusterListProps) {
   // Sort by votes (if any) or by average priority
   const sortedClusters = [...clusters].sort((a, b) => {
@@ -816,57 +819,75 @@ export function GoalClusterList({
           const canSelect = isSelected || selectedIds.length < maxSelections;
 
           return (
-            <GoalCluster
-              key={cluster.id}
-              cluster={cluster}
-              isSelected={isSelected}
-              selectionNumber={isSelected ? selectionIndex + 1 : undefined}
-              onSelect={canSelect ? () => onToggleSelect(cluster.id) : undefined}
-              onEditName={
-                onEditClusterName
-                  ? (name) => onEditClusterName(cluster.id, name)
-                  : undefined
-              }
-              onEditDescription={
-                onEditClusterDescription
-                  ? (description) => onEditClusterDescription(cluster.id, description)
-                  : undefined
-              }
-              editable={editable}
-              onAddSubGoal={
-                onAddSubGoal
-                  ? (subGoal) => onAddSubGoal(cluster.id, subGoal)
-                  : undefined
-              }
-              onRemoveSubGoal={
-                onRemoveSubGoal
-                  ? (subGoalId) => onRemoveSubGoal(cluster.id, subGoalId)
-                  : undefined
-              }
-              onEditSubGoal={
-                onEditSubGoal
-                  ? (subGoalId, name, description) => onEditSubGoal(cluster.id, subGoalId, name, description)
-                  : undefined
-              }
-              isMergeMode={isMergeMode}
-              isSelectedForMerge={mergeSelectedIds.includes(cluster.id)}
-              onToggleMergeSelect={
-                onToggleMergeSelect
-                  ? () => onToggleMergeSelect(cluster.id)
-                  : undefined
-              }
-              onUndoMerge={
-                onUndoMerge && cluster.mergedFrom && cluster.mergedFrom.length > 0
-                  ? () => onUndoMerge(cluster.id)
-                  : undefined
-              }
-              otherClusters={sortedClusters.filter((c) => c.id !== cluster.id)}
-              onMergeInto={
-                onMergeInto
-                  ? async (targetId) => await onMergeInto(cluster.id, targetId)
-                  : undefined
-              }
-            />
+            <div key={cluster.id}>
+              <GoalCluster
+                cluster={cluster}
+                isSelected={isSelected}
+                selectionNumber={isSelected ? selectionIndex + 1 : undefined}
+                onSelect={canSelect ? () => onToggleSelect(cluster.id) : undefined}
+                onEditName={
+                  onEditClusterName
+                    ? (name) => onEditClusterName(cluster.id, name)
+                    : undefined
+                }
+                onEditDescription={
+                  onEditClusterDescription
+                    ? (description) => onEditClusterDescription(cluster.id, description)
+                    : undefined
+                }
+                editable={editable}
+                onAddSubGoal={
+                  onAddSubGoal
+                    ? (subGoal) => onAddSubGoal(cluster.id, subGoal)
+                    : undefined
+                }
+                onRemoveSubGoal={
+                  onRemoveSubGoal
+                    ? (subGoalId) => onRemoveSubGoal(cluster.id, subGoalId)
+                    : undefined
+                }
+                onEditSubGoal={
+                  onEditSubGoal
+                    ? (subGoalId, name, description) => onEditSubGoal(cluster.id, subGoalId, name, description)
+                    : undefined
+                }
+                isMergeMode={isMergeMode}
+                isSelectedForMerge={mergeSelectedIds.includes(cluster.id)}
+                onToggleMergeSelect={
+                  onToggleMergeSelect
+                    ? () => onToggleMergeSelect(cluster.id)
+                    : undefined
+                }
+                onUndoMerge={
+                  onUndoMerge && cluster.mergedFrom && cluster.mergedFrom.length > 0
+                    ? () => onUndoMerge(cluster.id)
+                    : undefined
+                }
+                otherClusters={sortedClusters.filter((c) => c.id !== cluster.id)}
+                onMergeInto={
+                  onMergeInto
+                    ? async (targetId) => await onMergeInto(cluster.id, targetId)
+                    : undefined
+                }
+              />
+              {onDeleteCluster && editable && !isMergeMode && (
+                <div className="flex justify-end -mt-2 mb-1 pr-2">
+                  <button
+                    onClick={() => {
+                      if (confirm(`Weet je zeker dat je "${cluster.name}" wilt verwijderen?`)) {
+                        onDeleteCluster(cluster.id);
+                      }
+                    }}
+                    className="text-xs text-red-500 hover:text-red-700 hover:underline flex items-center gap-1"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    Verwijderen
+                  </button>
+                </div>
+              )}
+            </div>
           );
         })}
       </div>
