@@ -310,7 +310,7 @@ export function DoelenStep({ onComplete, readOnly: readOnlyProp }: DoelenStepPro
           });
 
           return {
-            id: theme.id || `cluster-${index}`,
+            id: `cluster-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}`,
             name: theme.name,
             description: theme.description,
             goals: matchedGoals,
@@ -617,7 +617,7 @@ export function DoelenStep({ onComplete, readOnly: readOnlyProp }: DoelenStepPro
           });
 
           return {
-            id: theme.id || `cluster-regen-${index}`,
+            id: `cluster-regen-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}`,
             name: theme.name,
             description: theme.description,
             goals: matchedGoals,
@@ -1196,32 +1196,72 @@ export function DoelenStep({ onComplete, readOnly: readOnlyProp }: DoelenStepPro
             {/* Version selector - show when multiple versions exist */}
             {clusterVersions.length > 1 && !isReadOnly && (
               <div className="card p-3 bg-gray-50">
-                <div className="flex items-center gap-2 mb-2">
-                  <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
-                  <span className="text-sm font-medium text-gray-600">Versiegeschiedenis</span>
+                <div className="flex items-center justify-between mb-2">
+                  <div className="flex items-center gap-2">
+                    <svg className="w-4 h-4 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <span className="text-sm font-medium text-gray-600">Versiegeschiedenis</span>
+                  </div>
+                  <button
+                    onClick={() => {
+                      if (confirm("Weet je zeker dat je alle versiegeschiedenis wilt wissen? Dit kan niet ongedaan worden.")) {
+                        if (currentSession) {
+                          persistence.clearClusterVersions(currentSession.id);
+                        }
+                        setClusterVersions([]);
+                        setActiveVersionId(null);
+                        showToast("Versiegeschiedenis gewist", "info");
+                      }
+                    }}
+                    className="text-xs text-red-500 hover:text-red-700 flex items-center gap-1"
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                    Alles wissen
+                  </button>
                 </div>
                 <div className="flex flex-wrap gap-2">
                   {clusterVersions.map((version) => (
-                    <button
-                      key={version.id}
-                      onClick={() => {
-                        setActiveVersionId(version.id);
-                        setClusters(version.clusters as GoalClusterType[]);
-                        showToast(`Versie "${version.label}" geladen`, "info");
-                      }}
-                      className={`px-3 py-1.5 text-xs rounded-full border transition-colors ${
-                        activeVersionId === version.id
-                          ? "bg-cito-blue text-white border-cito-blue"
-                          : "bg-white text-gray-600 border-gray-300 hover:border-cito-blue hover:text-cito-blue"
-                      }`}
-                    >
-                      {version.label}
-                      <span className="ml-1 opacity-60">
-                        {new Date(version.createdAt).toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" })}
-                      </span>
-                    </button>
+                    <div key={version.id} className="flex items-center gap-0.5">
+                      <button
+                        onClick={() => {
+                          setActiveVersionId(version.id);
+                          setClusters(version.clusters as GoalClusterType[]);
+                          showToast(`Versie "${version.label}" geladen`, "info");
+                        }}
+                        className={`px-3 py-1.5 text-xs rounded-l-full border transition-colors ${
+                          activeVersionId === version.id
+                            ? "bg-cito-blue text-white border-cito-blue"
+                            : "bg-white text-gray-600 border-gray-300 hover:border-cito-blue hover:text-cito-blue"
+                        }`}
+                      >
+                        {version.label}
+                        <span className="ml-1 opacity-60">
+                          {new Date(version.createdAt).toLocaleTimeString("nl-NL", { hour: "2-digit", minute: "2-digit" })}
+                        </span>
+                      </button>
+                      <button
+                        onClick={() => {
+                          if (currentSession) {
+                            persistence.deleteClusterVersion(currentSession.id, version.id);
+                          }
+                          setClusterVersions(prev => prev.filter(v => v.id !== version.id));
+                          if (activeVersionId === version.id) setActiveVersionId(null);
+                        }}
+                        className={`px-1.5 py-1.5 text-xs rounded-r-full border border-l-0 transition-colors ${
+                          activeVersionId === version.id
+                            ? "bg-cito-blue text-white/70 border-cito-blue hover:text-white"
+                            : "bg-white text-gray-400 border-gray-300 hover:text-red-500 hover:border-red-300"
+                        }`}
+                        title="Verwijder deze versie"
+                      >
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                      </button>
+                    </div>
                   ))}
                 </div>
               </div>

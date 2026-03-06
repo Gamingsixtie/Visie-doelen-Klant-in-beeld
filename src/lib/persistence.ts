@@ -1047,3 +1047,17 @@ export function getClusterVersions(sessionId: string): ClusterVersion[] {
     }))
     .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime());
 }
+
+export function deleteClusterVersion(sessionId: string, versionId: string): void {
+  const allVersions = getFromStorage<ClusterVersion>(STORAGE_KEYS.GOAL_CLUSTER_VERSIONS);
+  const filtered = allVersions.filter((v) => !(v.sessionId === sessionId && v.id === versionId));
+  setInStorage(STORAGE_KEYS.GOAL_CLUSTER_VERSIONS, filtered);
+  syncExtraDataToSupabase(sessionId);
+}
+
+export function clearClusterVersions(sessionId: string): void {
+  const allVersions = getFromStorage<ClusterVersion>(STORAGE_KEYS.GOAL_CLUSTER_VERSIONS);
+  const filtered = allVersions.filter((v) => v.sessionId !== sessionId);
+  setInStorage(STORAGE_KEYS.GOAL_CLUSTER_VERSIONS, filtered);
+  syncExtraDataToSupabase(sessionId);
+}
