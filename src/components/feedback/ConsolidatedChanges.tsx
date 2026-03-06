@@ -119,8 +119,8 @@ function ChangeCard({
   onRefineChange?: (changeId: string, feedback: string) => Promise<void>;
   onDeleteChange?: (changeId: string) => void;
 }) {
-  const [showDisagreeComment, setShowDisagreeComment] = useState(false);
-  const [disagreeComment, setDisagreeComment] = useState("");
+  const [showCommentFor, setShowCommentFor] = useState<"disagree" | "abstain" | null>(null);
+  const [voteComment, setVoteComment] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(change.proposed_name);
@@ -136,19 +136,19 @@ function ChangeCard({
   const hasDisagree = disagreeCount > 0;
 
   const handleVote = (value: ChangeVoteValue) => {
-    if (value === "disagree") {
-      setShowDisagreeComment(true);
+    if (value === "disagree" || value === "abstain") {
+      setShowCommentFor(value);
     } else {
       onVote(change.change_id, value);
-      setShowDisagreeComment(false);
+      setShowCommentFor(null);
     }
   };
 
-  const handleSubmitDisagree = () => {
-    if (!disagreeComment.trim()) return;
-    onVote(change.change_id, "disagree", disagreeComment);
-    setShowDisagreeComment(false);
-    setDisagreeComment("");
+  const handleSubmitWithComment = () => {
+    if (!showCommentFor) return;
+    onVote(change.change_id, showCommentFor, voteComment.trim() || undefined);
+    setShowCommentFor(null);
+    setVoteComment("");
   };
 
   const handleSaveEdit = () => {
@@ -409,11 +409,17 @@ function ChangeCard({
             })}
           </div>
 
-          {/* Disagree comments */}
-          {votes.filter(v => v.value === "disagree" && v.comment).map(v => (
-            <div key={v.id} className="mb-2 p-2 bg-red-50 border border-red-100 rounded-lg text-sm">
-              <span className="font-medium text-red-700">{v.member_name}:</span>{" "}
-              <span className="text-red-600">{v.comment}</span>
+          {/* Vote comments (disagree + abstain) */}
+          {votes.filter(v => (v.value === "disagree" || v.value === "abstain") && v.comment).map(v => (
+            <div key={v.id} className={`mb-2 p-2 border rounded-lg text-sm ${
+              v.value === "disagree"
+                ? "bg-red-50 border-red-100"
+                : "bg-amber-50 border-amber-100"
+            }`}>
+              <span className={`font-medium ${v.value === "disagree" ? "text-red-700" : "text-amber-700"}`}>
+                {v.member_name} ({v.value === "disagree" ? "bezwaar" : "onthouding"}):
+              </span>{" "}
+              <span className={v.value === "disagree" ? "text-red-600" : "text-amber-600"}>{v.comment}</span>
             </div>
           ))}
 
@@ -460,30 +466,50 @@ function ChangeCard({
             </button>
           </div>
 
-          {/* Disagree comment input */}
-          {showDisagreeComment && (
-            <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded-lg">
-              <label className="block text-sm font-medium text-red-800 mb-2">
-                Toelichting bij bezwaar (verplicht)
+          {/* Comment input for disagree/abstain */}
+          {showCommentFor && (
+            <div className={`mt-3 p-3 border rounded-lg ${
+              showCommentFor === "disagree"
+                ? "bg-red-50 border-red-200"
+                : "bg-amber-50 border-amber-200"
+            }`}>
+              <label className={`block text-sm font-medium mb-2 ${
+                showCommentFor === "disagree" ? "text-red-800" : "text-amber-800"
+              }`}>
+                {showCommentFor === "disagree"
+                  ? "Toelichting bij bezwaar"
+                  : "Toelichting bij onthouding"
+                }
+                <span className="font-normal text-gray-500 ml-1">(optioneel)</span>
               </label>
               <textarea
-                value={disagreeComment}
-                onChange={(e) => setDisagreeComment(e.target.value)}
-                placeholder="Geef aan waarom je bezwaar hebt..."
-                className="w-full px-3 py-2 border border-red-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-red-500 text-sm"
-                rows={3}
+                value={voteComment}
+                onChange={(e) => setVoteComment(e.target.value)}
+                placeholder={showCommentFor === "disagree"
+                  ? "Geef aan waarom je bezwaar hebt..."
+                  : "Geef aan waarom je je onthoudt..."
+                }
+                className={`w-full px-3 py-2 border rounded-lg focus:outline-none focus:ring-2 text-sm ${
+                  showCommentFor === "disagree"
+                    ? "border-red-300 focus:ring-red-500"
+                    : "border-amber-300 focus:ring-amber-500"
+                }`}
+                rows={2}
                 autoFocus
               />
               <div className="mt-2 flex gap-2">
                 <button
-                  onClick={handleSubmitDisagree}
-                  disabled={!disagreeComment.trim()}
-                  className="px-4 py-2 bg-red-600 text-white text-sm rounded-lg hover:bg-red-700 disabled:opacity-50"
+                  onClick={handleSubmitWithComment}
+                  className={`px-4 py-2 text-white text-sm rounded-lg ${
+                    showCommentFor === "disagree"
+                      ? "bg-red-600 hover:bg-red-700"
+                      : "bg-amber-600 hover:bg-amber-700"
+                  }`}
                 >
-                  Bezwaar indienen
+                  {showCommentFor === "disagree" ? "Bezwaar indienen" : "Onthouding indienen"}
                 </button>
                 <button
-                  onClick={() => { setShowDisagreeComment(false); setDisagreeComment(""); }}
+                  onClick={() => { setShowCommentFor(null); setVoteComment(""); }}
                   className="px-4 py-2 bg-gray-200 text-gray-700 text-sm rounded-lg hover:bg-gray-300"
                 >
                   Annuleren

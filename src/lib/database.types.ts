@@ -223,6 +223,7 @@ export interface Database {
           phase: "collecting" | "consolidating" | "voting" | "approved";
           consolidated_changes: Json | null;
           consolidated_changes_history: Json;
+          member_ready: Json;
           created_at: string;
         };
         Insert: {
@@ -235,6 +236,7 @@ export interface Database {
           phase?: "collecting" | "consolidating" | "voting" | "approved";
           consolidated_changes?: Json | null;
           consolidated_changes_history?: Json;
+          member_ready?: Json;
           created_at?: string;
         };
         Update: {
@@ -247,6 +249,56 @@ export interface Database {
           phase?: "collecting" | "consolidating" | "voting" | "approved";
           consolidated_changes?: Json | null;
           consolidated_changes_history?: Json;
+          member_ready?: Json;
+          created_at?: string;
+        };
+      };
+      dot_votes: {
+        Row: {
+          id: string;
+          session_id: string;
+          member_name: string;
+          cluster_id: string;
+          dots: number;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          session_id: string;
+          member_name: string;
+          cluster_id: string;
+          dots: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          session_id?: string;
+          member_name?: string;
+          cluster_id?: string;
+          dots?: number;
+          created_at?: string;
+          updated_at?: string;
+        };
+      };
+      dot_voting_ready: {
+        Row: {
+          id: string;
+          session_id: string;
+          member_name: string;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          session_id: string;
+          member_name: string;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          session_id?: string;
+          member_name?: string;
           created_at?: string;
         };
       };

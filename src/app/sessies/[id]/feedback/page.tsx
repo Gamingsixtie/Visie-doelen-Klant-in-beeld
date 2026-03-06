@@ -46,10 +46,12 @@ export default function FeedbackPage() {
   const [isConsolidating, setIsConsolidating] = useState(false);
   const [isApplying, setIsApplying] = useState(false);
   const [changesHistory, setChangesHistory] = useState<ConsolidatedChangesVersion[]>([]);
+  const [memberReady, setMemberReady] = useState<string[]>([]);
 
   // Derived state
   const phase: FeedbackPhase = round?.phase || "collecting";
   const isFacilitator = currentMember === FACILITATOR_NAME;
+  const isCurrentMemberReady = currentMember ? memberReady.includes(currentMember) : false;
   const consolidatedChanges = round?.consolidated_changes as ConsolidatedChangesType | null;
   const proposedChanges: ProposedChange[] = consolidatedChanges?.changes || [];
   const stepType: FeedbackStepType = (round?.step_type as FeedbackStepType) || "doelen";
@@ -101,6 +103,7 @@ export default function FeedbackPage() {
       setRound(targetRound);
       setClusters((targetRound.source_clusters || []) as ClusterData[]);
       setChangesHistory((targetRound.consolidated_changes_history || []) as ConsolidatedChangesVersion[]);
+      setMemberReady((targetRound.member_ready || []) as string[]);
 
       const fullData = await feedbackService.getFullRoundData(targetRound.id);
       if (fullData) {
@@ -479,6 +482,23 @@ export default function FeedbackPage() {
     }
   };
 
+  // Handle member ready toggle
+  const handleToggleReady = async () => {
+    if (!round || !currentMember || isFacilitator) return;
+
+    if (isCurrentMemberReady) {
+      const success = await feedbackService.unmarkMemberReady(round.id, currentMember);
+      if (success) {
+        setMemberReady(prev => prev.filter(m => m !== currentMember));
+      }
+    } else {
+      const success = await feedbackService.markMemberReady(round.id, currentMember);
+      if (success) {
+        setMemberReady(prev => [...prev, currentMember]);
+      }
+    }
+  };
+
   // Handle restoring a previous version
   const handleRestoreVersion = async (versionId: string) => {
     if (!round || !isFacilitator) return;
@@ -686,6 +706,7 @@ export default function FeedbackPage() {
                 votes={votes}
                 phase={phase}
                 facilitatorName={round?.facilitator_name}
+                memberReady={memberReady}
               />
             ) : (
               <div className="space-y-4">
@@ -724,6 +745,44 @@ export default function FeedbackPage() {
           </>
         )}
 
+        {/* Klaar met feedback - sticky footer for MT members in collecting phase */}
+        {phase === "collecting" && currentMember && !isFacilitator && (
+          <div className="fixed bottom-0 left-0 right-0 bg-white border-t shadow-lg z-20">
+            <div className="max-w-5xl mx-auto px-4 py-3 flex items-center justify-between">
+              <div className="text-sm text-gray-600">
+                {isCurrentMemberReady
+                  ? "Je hebt aangegeven dat je klaar bent met feedback."
+                  : "Klaar met feedback geven? Laat het de facilitator weten."
+                }
+              </div>
+              <button
+                onClick={handleToggleReady}
+                className={`px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 transition-colors ${
+                  isCurrentMemberReady
+                    ? "bg-green-100 text-green-800 hover:bg-green-200"
+                    : "bg-cito-blue text-white hover:bg-blue-800"
+                }`}
+              >
+                {isCurrentMemberReady ? (
+                  <>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    Klaar — klik om te wijzigen
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    Ik ben klaar met feedback
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        )}
+
         {/* Phase: Consolidating */}
         {phase === "consolidating" && (
           <div className="flex flex-col items-center justify-center py-16">
@@ -733,6 +792,11 @@ export default function FeedbackPage() {
               De AI analyseert alle {suggestions.length} suggesties en stelt wijzigingen voor op basis van de feedback van het MT.
             </p>
           </div>
+        )}
+
+        {/* Phase: Voting - shareable link for MT members */}
+        {phase === "voting" && isFacilitator && (
+          <VotingShareLink sessionId={sessionId} stepType={stepType} />
         )}
 
         {/* Phase: Voting */}
@@ -813,6 +877,67 @@ function PhaseIndicator({ phase }: { phase: FeedbackPhase }) {
   };
   const c = config[phase];
   return <span className={`px-2.5 py-1 text-xs font-medium rounded-full ${c.className}`}>{c.label}</span>;
+}
+
+// Voting share link for facilitator
+function VotingShareLink({ sessionId, stepType }: { sessionId: string; stepType: string }) {
+  const [copied, setCopied] = useState(false);
+  const votingUrl = typeof window !== "undefined"
+    ? `${window.location.origin}/sessies/${sessionId}/feedback?step=${stepType}`
+    : "";
+
+  const handleCopy = () => {
+    navigator.clipboard.writeText(votingUrl);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="card bg-purple-50 border-purple-200">
+      <div className="flex items-start gap-3">
+        <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center flex-shrink-0">
+          <svg className="w-5 h-5 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8h2a2 2 0 012 2v6a2 2 0 01-2 2h-2v4l-4-4H9a1.994 1.994 0 01-1.414-.586m0 0L11 14h4a2 2 0 002-2V6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2v4l.586-.586z" />
+          </svg>
+        </div>
+        <div className="flex-1">
+          <h3 className="font-semibold text-gray-900 mb-1">Stemronde link delen</h3>
+          <p className="text-sm text-gray-600 mb-3">
+            Deel deze link met MT-leden zodat zij op hun eigen laptop kunnen stemmen op de voorgestelde wijzigingen.
+          </p>
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              value={votingUrl}
+              readOnly
+              className="flex-1 px-3 py-2 bg-white border border-gray-300 rounded-lg text-sm text-gray-700"
+              onClick={(e) => (e.target as HTMLInputElement).select()}
+            />
+            <button
+              onClick={handleCopy}
+              className="px-3 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 text-sm flex items-center gap-1"
+            >
+              {copied ? (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                  </svg>
+                  Gekopieerd
+                </>
+              ) : (
+                <>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3" />
+                  </svg>
+                  Kopieer
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 // Tab button component

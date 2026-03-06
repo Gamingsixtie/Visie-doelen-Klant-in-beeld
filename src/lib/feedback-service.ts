@@ -23,6 +23,7 @@ export interface FeedbackRound {
   phase: FeedbackPhase;
   consolidated_changes: ConsolidatedChanges | null;
   consolidated_changes_history: ConsolidatedChangesVersion[];
+  member_ready: string[];
   created_at: string;
 }
 
@@ -677,4 +678,55 @@ export async function getActiveRound(sessionId: string, stepType?: FeedbackStepT
   }
 
   return data as unknown as FeedbackRound;
+}
+
+// === Member Ready Functions ===
+
+export async function markMemberReady(roundId: string, memberName: string): Promise<boolean> {
+  if (!isSupabaseConfigured() || !supabase) return false;
+
+  const { data: round } = await supabase
+    .from("feedback_rounds")
+    .select("member_ready")
+    .eq("id", roundId)
+    .single();
+
+  const currentReady = (round?.member_ready || []) as string[];
+  if (currentReady.includes(memberName)) return true;
+
+  const updated = [...currentReady, memberName];
+  const { error } = await supabase
+    .from("feedback_rounds")
+    .update({ member_ready: updated })
+    .eq("id", roundId);
+
+  if (error) {
+    console.error("Error marking member ready:", error);
+    return false;
+  }
+  return true;
+}
+
+export async function unmarkMemberReady(roundId: string, memberName: string): Promise<boolean> {
+  if (!isSupabaseConfigured() || !supabase) return false;
+
+  const { data: round } = await supabase
+    .from("feedback_rounds")
+    .select("member_ready")
+    .eq("id", roundId)
+    .single();
+
+  const currentReady = (round?.member_ready || []) as string[];
+  const updated = currentReady.filter(m => m !== memberName);
+
+  const { error } = await supabase
+    .from("feedback_rounds")
+    .update({ member_ready: updated })
+    .eq("id", roundId);
+
+  if (error) {
+    console.error("Error unmarking member ready:", error);
+    return false;
+  }
+  return true;
 }

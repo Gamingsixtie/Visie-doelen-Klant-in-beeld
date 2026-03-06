@@ -17,9 +17,10 @@ interface FeedbackOverviewProps {
   isRoundClosed?: boolean;
   phase?: FeedbackPhase;
   facilitatorName?: string | null;
+  memberReady?: string[];
 }
 
-export function FeedbackOverview({ clusters, suggestions, votes, isRoundClosed, phase, facilitatorName }: FeedbackOverviewProps) {
+export function FeedbackOverview({ clusters, suggestions, votes, isRoundClosed, phase, facilitatorName, memberReady = [] }: FeedbackOverviewProps) {
   const effectiveIsRoundClosed = phase ? phase === "approved" : !!isRoundClosed;
   // Participation stats
   const membersWithFeedback = new Set(suggestions.map(s => s.member_name));
@@ -74,20 +75,34 @@ export function FeedbackOverview({ clusters, suggestions, votes, isRoundClosed, 
 
       {/* Participation */}
       <div className="card p-4">
-        <h3 className="font-semibold text-gray-800 mb-3">Deelname</h3>
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="font-semibold text-gray-800">Deelname</h3>
+          {memberReady.length > 0 && (
+            <span className="text-sm text-green-700 font-medium">
+              {memberReady.length}/{totalMembers} klaar
+            </span>
+          )}
+        </div>
         <div className="flex flex-wrap gap-2">
           {MT_MEMBERS.map(name => {
             const hasFeedback = membersWithFeedback.has(name);
+            const isReady = memberReady.includes(name);
             return (
               <div
                 key={name}
                 className={`px-3 py-1.5 rounded-full text-sm flex items-center gap-1.5 ${
-                  hasFeedback
-                    ? "bg-green-100 text-green-700 border border-green-200"
-                    : "bg-gray-100 text-gray-500 border border-gray-200"
+                  isReady
+                    ? "bg-green-100 text-green-700 border-2 border-green-400"
+                    : hasFeedback
+                      ? "bg-green-50 text-green-700 border border-green-200"
+                      : "bg-gray-100 text-gray-500 border border-gray-200"
                 }`}
               >
-                {hasFeedback ? (
+                {isReady ? (
+                  <svg className="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
+                  </svg>
+                ) : hasFeedback ? (
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
                   </svg>
@@ -97,6 +112,7 @@ export function FeedbackOverview({ clusters, suggestions, votes, isRoundClosed, 
                   </svg>
                 )}
                 {name}
+                {isReady && <span className="text-xs font-medium">klaar</span>}
               </div>
             );
           })}
