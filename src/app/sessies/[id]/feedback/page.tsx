@@ -301,13 +301,14 @@ export default function FeedbackPage() {
           const flowState = session.flow_state as Record<string, unknown>;
 
           if (stepType === "doelen") {
-            const doelenState = (flowState.doelen || {}) as Record<string, unknown>;
+            // Clusters are stored at flow_state.goalClusters.clusters (persistence layer format)
+            const goalClustersObj = (flowState.goalClusters || {}) as Record<string, unknown>;
             await supabase
               .from("sessions")
               .update({
                 flow_state: {
                   ...flowState,
-                  doelen: { ...doelenState, goalClusters: updatedClusters }
+                  goalClusters: { ...goalClustersObj, clusters: updatedClusters }
                 }
               })
               .eq("id", sessionId);
@@ -494,7 +495,21 @@ export default function FeedbackPage() {
     } else {
       const success = await feedbackService.markMemberReady(round.id, currentMember);
       if (success) {
-        setMemberReady(prev => [...prev, currentMember]);
+        const newReady = [...memberReady, currentMember];
+        setMemberReady(newReady);
+
+        // Send email notification to facilitator
+        fetch("/api/notify-facilitator", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            memberName: currentMember,
+            sessionName,
+            stepType,
+            readyCount: newReady.length,
+            totalMembers: MT_MEMBERS.length
+          })
+        }).catch(() => {}); // Fire-and-forget
       }
     }
   };
@@ -533,8 +548,9 @@ export default function FeedbackPage() {
     let freshClusters: ClusterData[] = [];
 
     if (stepType === "doelen") {
-      const doelenState = (flowState.doelen || {}) as Record<string, unknown>;
-      freshClusters = (doelenState.goalClusters || []) as ClusterData[];
+      // Clusters are stored at flow_state.goalClusters.clusters (persistence layer format)
+      const goalClustersObj = (flowState.goalClusters || {}) as Record<string, unknown>;
+      freshClusters = (goalClustersObj.clusters || []) as ClusterData[];
     } else if (stepType === "scope") {
       const scopeState = (flowState.scope || {}) as Record<string, unknown>;
       const scopeItems = (scopeState.scopeItems || []) as Array<{ id: string; text: string; source: string }>;

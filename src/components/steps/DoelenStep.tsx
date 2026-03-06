@@ -642,6 +642,60 @@ export function DoelenStep({ onComplete, readOnly: readOnlyProp }: DoelenStepPro
     showToast("Nieuwe doelen met Claude 4.6 overgenomen!", "success");
   };
 
+  // Accept only selected regenerated clusters (add to existing)
+  const handleAcceptSelectedRegenerated = (selectedIds: string[]) => {
+    if (!regeneratedClusters) return;
+
+    const selectedClusters = regeneratedClusters.filter(c => selectedIds.includes(c.id));
+    if (selectedClusters.length === 0) return;
+
+    // Save current version
+    if (currentSession) {
+      persistence.saveClusterVersion(
+        currentSession.id,
+        clusters,
+        "Voor toevoeging Claude 4.6 doelen",
+        "re_generate"
+      );
+    }
+
+    // Add selected clusters to existing (avoid duplicates by name)
+    const existingNames = new Set(clusters.map(c => c.name.toLowerCase()));
+    const newToAdd = selectedClusters.filter(c => !existingNames.has(c.name.toLowerCase()));
+    const toReplace = selectedClusters.filter(c => existingNames.has(c.name.toLowerCase()));
+
+    let updatedClusters = [...clusters];
+
+    // Replace matching clusters with the new version
+    toReplace.forEach(newC => {
+      updatedClusters = updatedClusters.map(old =>
+        old.name.toLowerCase() === newC.name.toLowerCase()
+          ? { ...newC, id: old.id } // Keep old ID for continuity
+          : old
+      );
+    });
+
+    // Add genuinely new clusters
+    updatedClusters = [...updatedClusters, ...newToAdd];
+
+    setClusters(updatedClusters);
+
+    // Save new version
+    if (currentSession) {
+      const version = persistence.saveClusterVersion(
+        currentSession.id,
+        updatedClusters,
+        `${selectedClusters.length} Claude 4.6 doelen toegevoegd`,
+        "ai_generate"
+      );
+      setClusterVersions(prev => [...prev, version]);
+      setActiveVersionId(version.id);
+    }
+
+    setRegeneratedClusters(null);
+    showToast(`${selectedClusters.length} doel(en) toegevoegd/bijgewerkt`, "success");
+  };
+
   // Dismiss regenerated clusters
   const handleDismissRegenerated = () => {
     setRegeneratedClusters(null);
@@ -1187,7 +1241,8 @@ export function DoelenStep({ onComplete, readOnly: readOnlyProp }: DoelenStepPro
               <RegenerationComparison
                 oldClusters={clusters}
                 newClusters={regeneratedClusters}
-                onAccept={handleAcceptRegenerated}
+                onAcceptSelected={handleAcceptSelectedRegenerated}
+                onAcceptAll={handleAcceptRegenerated}
                 onDismiss={handleDismissRegenerated}
               />
             )}
@@ -2089,14 +2144,25 @@ export function DoelenStep({ onComplete, readOnly: readOnlyProp }: DoelenStepPro
 function RegenerationComparison({
   oldClusters,
   newClusters,
-  onAccept,
+  onAcceptSelected,
+  onAcceptAll,
   onDismiss
 }: {
   oldClusters: GoalClusterType[];
   newClusters: GoalClusterType[];
-  onAccept: () => void;
+  onAcceptSelected: (selectedIds: string[]) => void;
+  onAcceptAll: () => void;
   onDismiss: () => void;
 }) {
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+
+  const toggleSelect = (id: string) => {
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
+
+  const selectAll = () => setSelectedIds(newClusters.map(c => c.id));
+  const selectNone = () => setSelectedIds([]);
+
   // Try to match old and new clusters by name similarity
   const matchedPairs = newClusters.map(newC => {
     const bestMatch = oldClusters.find(oldC => {
@@ -2130,6 +2196,9 @@ function RegenerationComparison({
         <div className="p-3 bg-white rounded-lg border border-indigo-200">
           <p className="text-xs font-medium text-indigo-600 uppercase mb-1">Claude 4.6</p>
           <p className="text-lg font-bold text-indigo-700">{newClusters.length} clusters</p>
+          {selectedIds.length > 0 && (
+            <p className="text-xs text-indigo-500 mt-1">{selectedIds.length} geselecteerd</p>
+          )}
         </div>
       </div>
 
@@ -2154,78 +2223,104 @@ function RegenerationComparison({
           </div>
         </div>
 
-        {/* Right: New clusters */}
+        {/* Right: New clusters - with checkboxes */}
         <div>
-          <h4 className="text-sm font-semibold text-indigo-600 mb-3 uppercase">Claude 4.6</h4>
+          <div className="flex items-center justify-between mb-3">
+            <h4 className="text-sm font-semibold text-indigo-600 uppercase">Claude 4.6</h4>
+            <div className="flex gap-2">
+              <button onClick={selectAll} className="text-xs text-indigo-600 hover:underline">Alles</button>
+              <span className="text-xs text-gray-300">|</span>
+              <button onClick={selectNone} className="text-xs text-gray-500 hover:underline">Geen</button>
+            </div>
+          </div>
           <div className="space-y-2">
-            {matchedPairs.map(({ newCluster, matchedOld }, i) => (
-              <div
-                key={newCluster.id}
-                className={`p-3 border rounded-lg ${
-                  matchedOld
-                    ? matchedOld.description !== newCluster.description
-                      ? "bg-amber-50 border-amber-200"
-                      : "bg-white"
-                    : "bg-green-50 border-green-200"
-                }`}
-              >
-                <div className="flex items-start gap-2">
-                  <span className="text-xs font-bold text-gray-400 mt-0.5">{i + 1}</span>
-                  <div className="flex-1">
-                    <div className="flex items-center gap-2">
-                      <p className="font-medium text-gray-800 text-sm">{newCluster.name}</p>
-                      {matchedOld ? (
-                        matchedOld.description !== newCluster.description && (
-                          <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-amber-100 text-amber-700">herschreven</span>
-                        )
-                      ) : (
-                        <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-green-100 text-green-700">nieuw</span>
-                      )}
+            {matchedPairs.map(({ newCluster, matchedOld }, i) => {
+              const isSelected = selectedIds.includes(newCluster.id);
+              return (
+                <div
+                  key={newCluster.id}
+                  onClick={() => toggleSelect(newCluster.id)}
+                  className={`p-3 border rounded-lg cursor-pointer transition-colors ${
+                    isSelected
+                      ? "ring-2 ring-indigo-500 border-indigo-300 bg-indigo-50"
+                      : matchedOld
+                        ? matchedOld.description !== newCluster.description
+                          ? "bg-amber-50 border-amber-200 hover:border-indigo-300"
+                          : "bg-white hover:border-indigo-300"
+                        : "bg-green-50 border-green-200 hover:border-indigo-300"
+                  }`}
+                >
+                  <div className="flex items-start gap-2">
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => {}}
+                      className="mt-1 w-4 h-4 text-indigo-600 rounded border-gray-300"
+                    />
+                    <span className="text-xs font-bold text-gray-400 mt-0.5">{i + 1}</span>
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2">
+                        <p className="font-medium text-gray-800 text-sm">{newCluster.name}</p>
+                        {matchedOld ? (
+                          matchedOld.description !== newCluster.description && (
+                            <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-amber-100 text-amber-700">herschreven</span>
+                          )
+                        ) : (
+                          <span className="px-1.5 py-0.5 text-[10px] font-medium rounded bg-green-100 text-green-700">nieuw</span>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{newCluster.description}</p>
+                      <p className="text-xs text-gray-400 mt-1">{newCluster.goals.length} respondent(en)</p>
                     </div>
-                    <p className="text-xs text-gray-500 mt-0.5 line-clamp-2">{newCluster.description}</p>
-                    <p className="text-xs text-gray-400 mt-1">{newCluster.goals.length} respondent(en)</p>
                   </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         </div>
       </div>
 
       {/* Unmatched old clusters note */}
       {unmatchedOld.length > 0 && (
-        <div className="mb-4 p-3 bg-red-50 border border-red-200 rounded-lg">
-          <p className="text-sm text-red-700 font-medium mb-1">
-            {unmatchedOld.length} doel{unmatchedOld.length !== 1 ? "en" : ""} uit de vorige versie {unmatchedOld.length !== 1 ? "komen" : "komt"} niet terug:
+        <div className="mb-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+          <p className="text-sm text-amber-700 font-medium mb-1">
+            {unmatchedOld.length} doel{unmatchedOld.length !== 1 ? "en" : ""} uit de vorige versie {unmatchedOld.length !== 1 ? "komen" : "komt"} niet terug in de nieuwe analyse.
+            Bij &quot;Geselecteerde toevoegen&quot; blijven je huidige doelen behouden.
           </p>
-          <ul className="text-xs text-red-600 space-y-0.5">
-            {unmatchedOld.map(c => (
-              <li key={c.id}>- {c.name}</li>
-            ))}
-          </ul>
         </div>
       )}
 
       {/* Action buttons */}
       <div className="flex items-center justify-between pt-4 border-t">
         <p className="text-xs text-gray-500">
-          De oude versie wordt bewaard in de versiegeschiedenis. Je kunt altijd terugkeren.
+          De oude versie wordt bewaard in de versiegeschiedenis.
         </p>
         <div className="flex gap-3">
           <button
             onClick={onDismiss}
             className="px-4 py-2 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 text-sm"
           >
-            Huidige behouden
+            Sluiten
           </button>
+          {selectedIds.length > 0 && (
+            <button
+              onClick={() => onAcceptSelected(selectedIds)}
+              className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 text-sm flex items-center gap-2"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+              </svg>
+              {selectedIds.length} geselecteerde toevoegen
+            </button>
+          )}
           <button
-            onClick={onAccept}
+            onClick={onAcceptAll}
             className="px-4 py-2 bg-indigo-600 text-white rounded-lg hover:bg-indigo-700 text-sm flex items-center gap-2"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
-            Nieuwe versie overnemen
+            Alles vervangen
           </button>
         </div>
       </div>

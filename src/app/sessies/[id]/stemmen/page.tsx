@@ -58,9 +58,10 @@ export default function StemmenPage() {
       setSessionName(session.name);
 
       // Extract goal clusters from flow_state
+      // Clusters are stored at flow_state.goalClusters.clusters (persistence layer format)
       const flowState = session.flow_state as Record<string, unknown>;
-      const doelenState = (flowState?.doelen || {}) as Record<string, unknown>;
-      const goalClusters = (doelenState?.goalClusters || []) as GoalClusterType[];
+      const goalClustersObj = (flowState?.goalClusters || {}) as Record<string, unknown>;
+      const goalClusters = (goalClustersObj?.clusters || []) as GoalClusterType[];
 
       if (goalClusters.length === 0) {
         setError("Geen doelen gevonden. Genereer eerst doelen in de doelen-stap.");
@@ -167,8 +168,8 @@ export default function StemmenPage() {
     if (!session) return;
 
     const flowState = session.flow_state as Record<string, unknown>;
-    const doelenState = (flowState?.doelen || {}) as Record<string, unknown>;
-    const goalClusters = (doelenState?.goalClusters || []) as GoalClusterType[];
+    const goalClustersObj = (flowState?.goalClusters || {}) as Record<string, unknown>;
+    const goalClusters = (goalClustersObj?.clusters || []) as GoalClusterType[];
 
     // Aggregate votes into cluster.votes totals
     const voteTotals: Record<string, number> = {};
@@ -188,9 +189,9 @@ export default function StemmenPage() {
       .update({
         flow_state: {
           ...flowState,
-          doelen: {
-            ...doelenState,
-            goalClusters: updatedClusters,
+          goalClusters: {
+            ...goalClustersObj,
+            clusters: updatedClusters,
             allVotes: freshVotes,
             phase: "voting" // Keep in voting phase so DoelenStep can proceed to ranking
           }
