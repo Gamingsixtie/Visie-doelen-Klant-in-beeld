@@ -404,26 +404,37 @@ export function DoelenStep({ onComplete, readOnly: readOnlyProp }: DoelenStepPro
     showToast("Subdoel bijgewerkt", "success");
   };
 
-  // Delete cluster handler - saves snapshot first for undo
+  // Delete cluster handler
   const handleDeleteCluster = (clusterId: string) => {
-    const clusterToDelete = clusters.find(c => c.id === clusterId);
-    if (!clusterToDelete) return;
+    const clusterName = clusters.find(c => c.id === clusterId)?.name || clusterId;
 
-    // Save current state as version snapshot before deleting
-    if (currentSession) {
-      const version = persistence.saveClusterVersion(
-        currentSession.id,
-        clusters,
-        `Voor verwijdering "${clusterToDelete.name}"`,
-        "re_generate"
-      );
-      setClusterVersions(prev => [...prev, version]);
-      setActiveVersionId(version.id);
+    // Delete first, version save is optional
+    const filtered = clusters.filter((c) => c.id !== clusterId);
+    if (filtered.length === clusters.length) {
+      console.error("Delete failed: cluster not found", clusterId, clusters.map(c => c.id));
+      showToast("Fout: doel niet gevonden", "error");
+      return;
     }
 
-    setClusters((prev) => prev.filter((c) => c.id !== clusterId));
-    setSelectedClusterIds((prev) => prev.filter((id) => id !== clusterId));
-    showToast(`"${clusterToDelete.name}" verwijderd — gebruik versiegeschiedenis om terug te zetten`, "info");
+    setClusters(filtered);
+    setSelectedClusterIds(selectedClusterIds.filter((id) => id !== clusterId));
+
+    // Try to save version snapshot for undo (non-blocking)
+    try {
+      if (currentSession) {
+        const version = persistence.saveClusterVersion(
+          currentSession.id,
+          clusters, // original clusters before delete
+          `Voor verwijdering "${clusterName}"`,
+          "re_generate"
+        );
+        setClusterVersions(prev => [...prev, version]);
+      }
+    } catch (e) {
+      console.warn("Version save failed (non-blocking):", e);
+    }
+
+    showToast(`"${clusterName}" verwijderd`, "success");
   };
 
   // Merge handlers
