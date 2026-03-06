@@ -404,11 +404,26 @@ export function DoelenStep({ onComplete, readOnly: readOnlyProp }: DoelenStepPro
     showToast("Subdoel bijgewerkt", "success");
   };
 
-  // Delete cluster handler
+  // Delete cluster handler - saves snapshot first for undo
   const handleDeleteCluster = (clusterId: string) => {
+    const clusterToDelete = clusters.find(c => c.id === clusterId);
+    if (!clusterToDelete) return;
+
+    // Save current state as version snapshot before deleting
+    if (currentSession) {
+      const version = persistence.saveClusterVersion(
+        currentSession.id,
+        clusters,
+        `Voor verwijdering "${clusterToDelete.name}"`,
+        "re_generate"
+      );
+      setClusterVersions(prev => [...prev, version]);
+      setActiveVersionId(version.id);
+    }
+
     setClusters((prev) => prev.filter((c) => c.id !== clusterId));
     setSelectedClusterIds((prev) => prev.filter((id) => id !== clusterId));
-    showToast("Doel verwijderd", "info");
+    showToast(`"${clusterToDelete.name}" verwijderd — gebruik versiegeschiedenis om terug te zetten`, "info");
   };
 
   // Merge handlers
