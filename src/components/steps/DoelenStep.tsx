@@ -121,87 +121,108 @@ export function DoelenStep({ onComplete, readOnly: readOnlyProp }: DoelenStepPro
   const [hasLoadedFromPersistence, setHasLoadedFromPersistence] = useState(false);
   const [lastLoadedTimestamp, setLastLoadedTimestamp] = useState<number>(0);
 
-  useEffect(() => {
+  // Reusable function to load clusters
+  const loadClustersFromStorage = async (forceReload = false) => {
     if (!currentSession || isReadOnly) return;
 
-    const loadClusters = async () => {
-      const saved = persistence.getGoalClusters(currentSession.id);
-      const savedTimestamp = saved?.savedAt?.getTime() || 0;
-      const hasNewerData = savedTimestamp > lastLoadedTimestamp;
+    const saved = persistence.getGoalClusters(currentSession.id);
+    const savedTimestamp = saved?.savedAt?.getTime() || 0;
+    const hasNewerData = savedTimestamp > lastLoadedTimestamp;
 
-      // Try localStorage first
-      if (saved && saved.clusters.length > 0 && (!hasLoadedFromPersistence || hasNewerData)) {
-        console.log("Loading goal clusters from localStorage:", saved.clusters.length, "clusters", hasNewerData ? "(newer data detected)" : "");
-        updateDoelenStepState({
-          clusters: saved.clusters as GoalClusterType[],
-          selectedClusterIds: saved.selectedClusterIds,
-          allVotes: saved.allVotes,
-          ranking: saved.ranking,
-          formulations: saved.formulations,
-          phase: saved.phase as DoelenStepPhase
-        });
-        setHasLoadedFromPersistence(true);
-        setLastLoadedTimestamp(savedTimestamp);
-        return;
-      }
+    // Try localStorage first
+    if (saved && saved.clusters.length > 0 && (forceReload || !hasLoadedFromPersistence || hasNewerData)) {
+      console.log("Loading goal clusters from localStorage:", saved.clusters.length, "clusters", hasNewerData ? "(newer data detected)" : "");
+      updateDoelenStepState({
+        clusters: saved.clusters as GoalClusterType[],
+        selectedClusterIds: saved.selectedClusterIds,
+        allVotes: saved.allVotes,
+        ranking: saved.ranking,
+        formulations: saved.formulations,
+        phase: saved.phase as DoelenStepPhase
+      });
+      setHasLoadedFromPersistence(true);
+      setLastLoadedTimestamp(savedTimestamp);
+      return;
+    }
 
-      // Fallback to Supabase if localStorage is empty/missing
-      if (!saved || saved.clusters.length === 0) {
-        if (supabase) {
-          console.log("localStorage empty, trying Supabase fallback...");
-          const { data: session } = await supabase
-            .from("sessions")
-            .select("flow_state")
-            .eq("id", currentSession.id)
-            .single();
+    // Fallback to Supabase if localStorage is empty/missing
+    if (!saved || saved.clusters.length === 0) {
+      if (supabase) {
+        console.log("localStorage empty, trying Supabase fallback...");
+        const { data: session } = await supabase
+          .from("sessions")
+          .select("flow_state")
+          .eq("id", currentSession.id)
+          .single();
 
-          if (session?.flow_state) {
-            const flowState = session.flow_state as Record<string, unknown>;
-            const goalClusters = flowState.goalClusters as Record<string, unknown> | undefined;
+        if (session?.flow_state) {
+          const flowState = session.flow_state as Record<string, unknown>;
+          const goalClusters = flowState.goalClusters as Record<string, unknown> | undefined;
 
-            if (goalClusters && Array.isArray(goalClusters.clusters) && goalClusters.clusters.length > 0) {
-              console.log("Loading goal clusters from Supabase:", goalClusters.clusters.length, "clusters");
+          if (goalClusters && Array.isArray(goalClusters.clusters) && goalClusters.clusters.length > 0) {
+            console.log("Loading goal clusters from Supabase:", goalClusters.clusters.length, "clusters");
 
-              // Save to localStorage for future use
-              persistence.saveGoalClusters(currentSession.id, {
-                clusters: goalClusters.clusters,
-                selectedClusterIds: (goalClusters.selectedClusterIds as string[]) || [],
-                allVotes: (goalClusters.allVotes as Record<string, Record<string, number>>) || {},
-                ranking: (goalClusters.ranking as string[]) || [],
-                formulations: (goalClusters.formulations as Record<string, string>) || {},
-                phase: (goalClusters.phase as string) || "clusters"
-              });
+            // Save to localStorage for future use
+            persistence.saveGoalClusters(currentSession.id, {
+              clusters: goalClusters.clusters,
+              selectedClusterIds: (goalClusters.selectedClusterIds as string[]) || [],
+              allVotes: (goalClusters.allVotes as Record<string, Record<string, number>>) || {},
+              ranking: (goalClusters.ranking as string[]) || [],
+              formulations: (goalClusters.formulations as Record<string, string>) || {},
+              phase: (goalClusters.phase as string) || "clusters"
+            });
 
-              updateDoelenStepState({
-                clusters: goalClusters.clusters as GoalClusterType[],
-                selectedClusterIds: (goalClusters.selectedClusterIds as string[]) || [],
-                allVotes: (goalClusters.allVotes as Record<string, Record<string, number>>) || {},
-                ranking: (goalClusters.ranking as string[]) || [],
-                formulations: (goalClusters.formulations as Record<string, string>) || {},
-                phase: (goalClusters.phase as DoelenStepPhase) || "clusters"
-              });
-              setHasLoadedFromPersistence(true);
-              setLastLoadedTimestamp(Date.now());
-              return;
-            }
+            updateDoelenStepState({
+              clusters: goalClusters.clusters as GoalClusterType[],
+              selectedClusterIds: (goalClusters.selectedClusterIds as string[]) || [],
+              allVotes: (goalClusters.allVotes as Record<string, Record<string, number>>) || {},
+              ranking: (goalClusters.ranking as string[]) || [],
+              formulations: (goalClusters.formulations as Record<string, string>) || {},
+              phase: (goalClusters.phase as DoelenStepPhase) || "clusters"
+            });
+            setHasLoadedFromPersistence(true);
+            setLastLoadedTimestamp(Date.now());
+            return;
           }
         }
-
-        if (clusters.length === 0) {
-          setHasLoadedFromPersistence(true);
-        }
       }
-    };
 
-    loadClusters();
+      if (clusters.length === 0) {
+        setHasLoadedFromPersistence(true);
+      }
+    }
+  };
+
+  // Load on mount
+  useEffect(() => {
+    loadClustersFromStorage();
 
     // Load cluster version history
-    const versions = persistence.getClusterVersions(currentSession.id);
+    const versions = persistence.getClusterVersions(currentSession?.id || "");
     if (versions.length > 0) {
       setClusterVersions(versions);
       setActiveVersionId(versions[versions.length - 1].id);
     }
   }, [currentSession, isReadOnly, hasLoadedFromPersistence, clusters.length, lastLoadedTimestamp]);
+
+  // Check for newer data when page becomes visible (e.g., returning from feedback page)
+  useEffect(() => {
+    if (!currentSession || isReadOnly) return;
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        const saved = persistence.getGoalClusters(currentSession.id);
+        const savedTimestamp = saved?.savedAt?.getTime() || 0;
+        if (savedTimestamp > lastLoadedTimestamp) {
+          console.log("Page visible, newer data detected in localStorage");
+          loadClustersFromStorage(true);
+        }
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityChange);
+  }, [currentSession, isReadOnly, lastLoadedTimestamp]);
 
   // Save goal clusters to persistence when state changes
   useEffect(() => {
