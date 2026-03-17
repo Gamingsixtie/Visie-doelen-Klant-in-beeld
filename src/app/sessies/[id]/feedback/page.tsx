@@ -7,6 +7,7 @@ import { MT_MEMBERS, FACILITATOR_NAME } from "@/lib/types";
 import * as feedbackService from "@/lib/feedback-service";
 import type { FeedbackRound, FeedbackSuggestion, SuggestionVote, SuggestionType, ChangeVote, ChangeVoteValue, FeedbackPhase, ConsolidatedChanges as ConsolidatedChangesType, ProposedChange, ConsolidatedChangesVersion, FeedbackStepType } from "@/lib/feedback-service";
 import { supabase } from "@/lib/supabase";
+import * as persistence from "@/lib/persistence";
 
 const STEP_TYPE_LABELS: Record<string, string> = {
   doelen: "Doelen",
@@ -345,6 +346,26 @@ export default function FeedbackPage() {
               .eq("id", sessionId);
           }
         }
+      }
+
+      // Sync updated clusters to localStorage for DoelenStep persistence
+      if (stepType === "doelen") {
+        const existingData = persistence.getGoalClusters(sessionId);
+        persistence.saveGoalClusters(sessionId, {
+          clusters: updatedClusters,
+          selectedClusterIds: existingData?.selectedClusterIds || [],
+          allVotes: existingData?.allVotes || {},
+          ranking: existingData?.ranking || [],
+          formulations: existingData?.formulations || {},
+          phase: existingData?.phase || "clusters"
+        });
+
+        persistence.saveClusterVersion(
+          sessionId,
+          updatedClusters,
+          "Feedback toegepast",
+          "feedback_applied"
+        );
       }
 
       // Mark round as approved
