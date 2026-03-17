@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useSession } from "@/lib/session-context";
 import { useToast, AnalyzingIndicator, ConfirmDialog, ActivityTimer, TIMER_PRESETS } from "@/components/ui";
 import { ResponseMatrix } from "@/components/consolidation";
@@ -107,6 +107,9 @@ export function DoelenStep({ onComplete, readOnly: readOnlyProp }: DoelenStepPro
   // Cluster version history
   const [clusterVersions, setClusterVersions] = useState<ClusterVersion[]>([]);
   const [activeVersionId, setActiveVersionId] = useState<string | null>(null);
+
+  // Guard to prevent save effect from overwriting Supabase before initial load completes
+  const isInitialLoadComplete = useRef(false);
 
   // Check if already approved
   useEffect(() => {
@@ -228,7 +231,11 @@ export function DoelenStep({ onComplete, readOnly: readOnlyProp }: DoelenStepPro
       }
     };
 
-    loadFromSupabase();
+    isInitialLoadComplete.current = false;
+    loadFromSupabase().then(() => {
+      isInitialLoadComplete.current = true;
+      console.log("[DoelenStep] Initial load complete, save effect unlocked");
+    });
 
     // Load cluster version history
     const versions = persistence.getClusterVersions(currentSession.id);
@@ -282,6 +289,7 @@ export function DoelenStep({ onComplete, readOnly: readOnlyProp }: DoelenStepPro
   useEffect(() => {
     if (!currentSession || isReadOnly) return;
     if (clusters.length === 0) return; // Don't save empty state
+    if (!isInitialLoadComplete.current) return; // Don't save stale state before Supabase load completes
 
     persistence.saveGoalClusters(currentSession.id, {
       clusters,
@@ -296,6 +304,7 @@ export function DoelenStep({ onComplete, readOnly: readOnlyProp }: DoelenStepPro
   // Sync clusters to active feedback round when clusters change
   useEffect(() => {
     if (!currentSession || isReadOnly || clusters.length === 0) return;
+    if (!isInitialLoadComplete.current) return; // Don't sync stale clusters
     updateActiveRoundSourceClusters(currentSession.id, clusters, "doelen");
   }, [currentSession, clusters, isReadOnly]);
 
