@@ -118,13 +118,25 @@ export function DoelenStep({ onComplete, readOnly: readOnlyProp }: DoelenStepPro
 
   // Load goal clusters from persistence on mount
   const [hasLoadedFromPersistence, setHasLoadedFromPersistence] = useState(false);
+  const [lastLoadedTimestamp, setLastLoadedTimestamp] = useState<number>(0);
 
   useEffect(() => {
-    if (!currentSession || isReadOnly || hasLoadedFromPersistence) return;
+    if (!currentSession || isReadOnly) return;
 
     const saved = persistence.getGoalClusters(currentSession.id);
-    if (saved && saved.clusters.length > 0) {
-      console.log("Loading goal clusters from persistence:", saved.clusters.length, "clusters");
+    if (!saved || saved.clusters.length === 0) {
+      if (clusters.length === 0) {
+        setHasLoadedFromPersistence(true);
+      }
+      return;
+    }
+
+    // Check if localStorage has newer data (e.g., from feedback approval)
+    const savedTimestamp = saved.savedAt?.getTime() || 0;
+    const hasNewerData = savedTimestamp > lastLoadedTimestamp;
+
+    if (!hasLoadedFromPersistence || hasNewerData) {
+      console.log("Loading goal clusters from persistence:", saved.clusters.length, "clusters", hasNewerData ? "(newer data detected)" : "");
       updateDoelenStepState({
         clusters: saved.clusters as GoalClusterType[],
         selectedClusterIds: saved.selectedClusterIds,
@@ -134,9 +146,7 @@ export function DoelenStep({ onComplete, readOnly: readOnlyProp }: DoelenStepPro
         phase: saved.phase as DoelenStepPhase
       });
       setHasLoadedFromPersistence(true);
-    } else if (clusters.length === 0) {
-      // Mark as loaded even if nothing was found, to prevent re-loading
-      setHasLoadedFromPersistence(true);
+      setLastLoadedTimestamp(savedTimestamp);
     }
 
     // Load cluster version history
@@ -145,7 +155,7 @@ export function DoelenStep({ onComplete, readOnly: readOnlyProp }: DoelenStepPro
       setClusterVersions(versions);
       setActiveVersionId(versions[versions.length - 1].id);
     }
-  }, [currentSession, isReadOnly, hasLoadedFromPersistence, clusters.length]);
+  }, [currentSession, isReadOnly, hasLoadedFromPersistence, clusters.length, lastLoadedTimestamp]);
 
   // Save goal clusters to persistence when state changes
   useEffect(() => {
