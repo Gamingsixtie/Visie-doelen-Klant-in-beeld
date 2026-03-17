@@ -466,7 +466,13 @@ export function VisieSummaryStep({ onComplete, onNavigateToStep }: VisieSummaryS
                         <RefineWithAI
                           currentText={generatedVision.uitgebreid}
                           context="Uitgebreide programmavisie Klant in Beeld"
-                          onRefined={(newText) => setGeneratedVision((prev) => prev ? { ...prev, uitgebreid: newText } : prev)}
+                          onRefined={(newText) => {
+                            const updated = { ...generatedVision, uitgebreid: newText };
+                            setGeneratedVision(updated);
+                            if (currentSession) {
+                              persistence.saveGeneratedVision(currentSession.id, updated.uitgebreid, updated.beknopt);
+                            }
+                          }}
                           undoKey="vision-uitgebreid"
                         />
                       </div>
@@ -500,7 +506,13 @@ export function VisieSummaryStep({ onComplete, onNavigateToStep }: VisieSummaryS
                         <RefineWithAI
                           currentText={generatedVision.beknopt}
                           context="Beknopte programmavisie Klant in Beeld (elevator pitch)"
-                          onRefined={(newText) => setGeneratedVision((prev) => prev ? { ...prev, beknopt: newText } : prev)}
+                          onRefined={(newText) => {
+                            const updated = { ...generatedVision, beknopt: newText };
+                            setGeneratedVision(updated);
+                            if (currentSession) {
+                              persistence.saveGeneratedVision(currentSession.id, updated.uitgebreid, updated.beknopt);
+                            }
+                          }}
                           undoKey="vision-beknopt"
                         />
                       </div>
