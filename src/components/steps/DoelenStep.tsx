@@ -141,16 +141,30 @@ export function DoelenStep({ onComplete, readOnly: readOnlyProp }: DoelenStepPro
       }
 
       try {
-        console.log("[DoelenStep] Loading from Supabase...");
-        const { data: session } = await supabase
+        console.log("[DoelenStep] Loading from Supabase for session:", currentSession.id);
+        const { data: session, error } = await supabase
           .from("sessions")
           .select("flow_state")
           .eq("id", currentSession.id)
           .single();
 
+        console.log("[DoelenStep] Supabase response:", {
+          hasData: !!session,
+          hasFlowState: !!session?.flow_state,
+          error: error?.message,
+          flowStateKeys: session?.flow_state ? Object.keys(session.flow_state as object) : []
+        });
+
         if (session?.flow_state) {
           const flowState = session.flow_state as Record<string, unknown>;
           const goalClusters = flowState.goalClusters as Record<string, unknown> | undefined;
+
+          console.log("[DoelenStep] goalClusters check:", {
+            hasGoalClusters: !!goalClusters,
+            hasClustersArray: goalClusters ? Array.isArray(goalClusters.clusters) : false,
+            clustersLength: goalClusters?.clusters ? (goalClusters.clusters as unknown[]).length : 0,
+            clusterNames: goalClusters?.clusters ? (goalClusters.clusters as {name?: string}[]).slice(0,3).map(c => c.name) : []
+          });
 
           if (goalClusters && Array.isArray(goalClusters.clusters) && goalClusters.clusters.length > 0) {
             console.log("[DoelenStep] Loaded from Supabase:", goalClusters.clusters.length, "clusters");

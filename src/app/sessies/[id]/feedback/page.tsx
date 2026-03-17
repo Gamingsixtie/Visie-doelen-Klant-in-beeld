@@ -304,7 +304,12 @@ export default function FeedbackPage() {
           if (stepType === "doelen") {
             // Clusters are stored at flow_state.goalClusters.clusters (persistence layer format)
             const goalClustersObj = (flowState.goalClusters || {}) as Record<string, unknown>;
-            await supabase
+            console.log("[Feedback] Saving to Supabase:", {
+              sessionId,
+              clusterCount: updatedClusters.length,
+              clusterNames: updatedClusters.map(c => c.name)
+            });
+            const { error: updateError } = await supabase
               .from("sessions")
               .update({
                 flow_state: {
@@ -313,6 +318,7 @@ export default function FeedbackPage() {
                 }
               })
               .eq("id", sessionId);
+            console.log("[Feedback] Supabase update result:", { error: updateError?.message || "success" });
           } else if (stepType === "scope") {
             // Scope: updatedClusters have { id, name (=text), description (=source) }
             const scopeState = (flowState.scope || {}) as Record<string, unknown>;
