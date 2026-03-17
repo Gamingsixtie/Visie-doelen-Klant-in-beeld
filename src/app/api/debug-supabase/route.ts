@@ -22,6 +22,7 @@ export async function GET() {
 
     return NextResponse.json({
       configured: true,
+      build: "v3-limit1-no-maybeSingle",
       url: url.substring(0, 30) + "...",
       sessions: data,
       error: error?.message || null
