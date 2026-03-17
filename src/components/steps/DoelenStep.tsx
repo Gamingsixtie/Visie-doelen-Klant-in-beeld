@@ -118,11 +118,9 @@ export function DoelenStep({ onComplete, readOnly: readOnlyProp }: DoelenStepPro
   }, [getApprovedText]);
 
   // Load goal clusters - Supabase is the source of truth
-  const [hasLoadedInitial, setHasLoadedInitial] = useState(false);
-
-  // Load clusters from Supabase (primary) with localStorage fallback
+  // Always reload when component mounts to get latest data
   useEffect(() => {
-    if (!currentSession || isReadOnly || hasLoadedInitial) return;
+    if (!currentSession || isReadOnly) return;
 
     const loadFromSupabase = async () => {
       if (!supabase) {
@@ -139,7 +137,6 @@ export function DoelenStep({ onComplete, readOnly: readOnlyProp }: DoelenStepPro
             phase: saved.phase as DoelenStepPhase
           });
         }
-        setHasLoadedInitial(true);
         return;
       }
 
@@ -183,8 +180,6 @@ export function DoelenStep({ onComplete, readOnly: readOnlyProp }: DoelenStepPro
               formulations: formulationsData,
               phase: phaseData
             });
-
-            setHasLoadedInitial(true);
             return;
           }
         }
@@ -217,8 +212,6 @@ export function DoelenStep({ onComplete, readOnly: readOnlyProp }: DoelenStepPro
           });
         }
       }
-
-      setHasLoadedInitial(true);
     };
 
     loadFromSupabase();
@@ -229,7 +222,7 @@ export function DoelenStep({ onComplete, readOnly: readOnlyProp }: DoelenStepPro
       setClusterVersions(versions);
       setActiveVersionId(versions[versions.length - 1].id);
     }
-  }, [currentSession, isReadOnly, hasLoadedInitial]);
+  }, [currentSession, isReadOnly]);
 
   // Reload from Supabase when page becomes visible (returning from feedback)
   useEffect(() => {
