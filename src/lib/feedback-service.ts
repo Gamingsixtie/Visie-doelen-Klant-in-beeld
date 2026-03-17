@@ -8,7 +8,6 @@ import { supabase, isSupabaseConfigured } from "./supabase";
 
 export type SuggestionType = "priority" | "text_edit" | "merge" | "comment";
 export type SuggestionVoteValue = "accept" | "reject";
-export type FeedbackRoundStatus = "open" | "closed";
 export type FeedbackPhase = "collecting" | "consolidating" | "voting" | "approved";
 export type ChangeVoteValue = "agree" | "disagree" | "abstain";
 export type FeedbackStepType = "doelen" | "scope" | "visie_huidige" | "visie_gewenste" | "visie_beweging" | "visie_stakeholders";
@@ -18,7 +17,6 @@ export interface FeedbackRound {
   session_id: string;
   source_clusters: unknown[];
   step_type: FeedbackStepType;
-  status: FeedbackRoundStatus;
   facilitator_name: string | null;
   phase: FeedbackPhase;
   consolidated_changes: ConsolidatedChanges | null;
@@ -121,7 +119,6 @@ export async function createFeedbackRound(
       session_id: sessionId,
       source_clusters: sourceClusters as unknown as Record<string, unknown>,
       step_type: stepType,
-      status: "open",
       phase: "collecting" as const,
       facilitator_name: facilitatorName || null
     })
@@ -160,7 +157,7 @@ export async function getLatestOpenRound(sessionId: string): Promise<FeedbackRou
     .from("feedback_rounds")
     .select("*")
     .eq("session_id", sessionId)
-    .eq("status", "open")
+    .in("phase", ["collecting", "consolidating", "voting"])
     .order("created_at", { ascending: false })
     .limit(1)
     .single();
@@ -179,7 +176,7 @@ export async function closeFeedbackRound(roundId: string): Promise<boolean> {
 
   const { error } = await supabase
     .from("feedback_rounds")
-    .update({ status: "closed" })
+    .update({ phase: "approved" })
     .eq("id", roundId);
 
   if (error) {
@@ -374,15 +371,9 @@ export async function updateRoundPhase(
 ): Promise<boolean> {
   if (!isSupabaseConfigured() || !supabase) return false;
 
-  const updateData: Record<string, unknown> = { phase };
-  // Keep status in sync: approved = closed, rest = open
-  if (phase === "approved") {
-    updateData.status = "closed";
-  }
-
   const { error } = await supabase
     .from("feedback_rounds")
-    .update(updateData)
+    .update({ phase })
     .eq("id", roundId);
 
   if (error) {

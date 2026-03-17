@@ -138,7 +138,7 @@ export function DoelenStep({ onComplete, readOnly: readOnlyProp }: DoelenStepPro
       hasLoadedFromPersistence,
       forceReload,
       currentClusters: clusters.length,
-      clusterNames: saved?.clusters.slice(0, 3).map((c: { name?: string }) => c.name)
+      clusterNames: saved?.clusters.slice(0, 3).map((c) => (c as { name?: string }).name)
     });
 
     // Try localStorage first
