@@ -36,6 +36,14 @@ export default function SessionPage() {
   const [isInitialized, setIsInitialized] = useState(false);
   const [syncStatus, setSyncStatus] = useState<"idle" | "syncing" | "success" | "failed">("idle");
   const [autoRefresh, setAutoRefresh] = useState(false);
+  const [doelenRefreshKey, setDoelenRefreshKey] = useState(0);
+
+  // Force DoelenStep to remount when navigating to it (to reload from Supabase)
+  useEffect(() => {
+    if (flowState.currentStep === "doelen") {
+      setDoelenRefreshKey(prev => prev + 1);
+    }
+  }, [flowState.currentStep]);
 
   // Auto-sync session to server when data changes (for presenters)
   // Sync immediately when any data changes (including syncState for component-level state)
@@ -209,7 +217,7 @@ export default function SessionPage() {
           />
         );
       case "doelen":
-        return <DoelenStep onComplete={handleStepComplete} readOnly={readOnly} />;
+        return <DoelenStep key={doelenRefreshKey} onComplete={handleStepComplete} readOnly={readOnly} />;
       case "scope":
         return <ScopeStep onComplete={handleStepComplete} readOnly={readOnly} />;
       case "export":
