@@ -159,15 +159,14 @@ export async function getLatestOpenRound(sessionId: string): Promise<FeedbackRou
     .eq("session_id", sessionId)
     .in("phase", ["collecting", "consolidating", "voting"])
     .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .limit(1);
 
   if (error) {
     console.error("Error fetching latest open round:", error);
     return null;
   }
 
-  return data as unknown as FeedbackRound;
+  return (data?.[0] as unknown as FeedbackRound) ?? null;
 }
 
 export async function closeFeedbackRound(roundId: string): Promise<boolean> {
@@ -319,12 +318,13 @@ export async function getFullRoundData(roundId: string): Promise<FullRoundData |
   if (!isSupabaseConfigured() || !supabase) return null;
 
   // Fetch round
-  const { data: round, error: roundError } = await supabase
+  const { data: roundRows, error: roundError } = await supabase
     .from("feedback_rounds")
     .select("*")
     .eq("id", roundId)
-    .maybeSingle();
+    .limit(1);
 
+  const round = roundRows?.[0];
   if (roundError || !round) return null;
 
   // Fetch suggestions
@@ -465,12 +465,13 @@ export async function saveConsolidatedChangesWithHistory(
   if (!isSupabaseConfigured() || !supabase) return false;
 
   // First fetch current round to get existing data
-  const { data: round, error: fetchError } = await supabase
+  const { data: roundRows, error: fetchError } = await supabase
     .from("feedback_rounds")
     .select("consolidated_changes, consolidated_changes_history")
     .eq("id", roundId)
-    .maybeSingle();
+    .limit(1);
 
+  const round = roundRows?.[0];
   if (fetchError || !round) {
     console.error("Error fetching round for history:", fetchError);
     return false;
@@ -513,12 +514,13 @@ export async function restoreConsolidatedChangesVersion(
   if (!isSupabaseConfigured() || !supabase) return null;
 
   // Fetch current round
-  const { data: round, error: fetchError } = await supabase
+  const { data: roundRows, error: fetchError } = await supabase
     .from("feedback_rounds")
     .select("consolidated_changes, consolidated_changes_history")
     .eq("id", roundId)
-    .maybeSingle();
+    .limit(1);
 
+  const round = roundRows?.[0];
   if (fetchError || !round) return null;
 
   const history = (round.consolidated_changes_history || []) as unknown as ConsolidatedChangesVersion[];
@@ -658,15 +660,14 @@ export async function getActiveRound(sessionId: string, stepType?: FeedbackStepT
 
   const { data, error } = await query
     .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
+    .limit(1);
 
   if (error) {
     console.error("Error fetching active round:", error);
     return null;
   }
 
-  return data as unknown as FeedbackRound;
+  return (data?.[0] as unknown as FeedbackRound) ?? null;
 }
 
 // === Member Ready Functions ===
@@ -674,13 +675,13 @@ export async function getActiveRound(sessionId: string, stepType?: FeedbackStepT
 export async function markMemberReady(roundId: string, memberName: string): Promise<boolean> {
   if (!isSupabaseConfigured() || !supabase) return false;
 
-  const { data: round } = await supabase
+  const { data: roundRows } = await supabase
     .from("feedback_rounds")
     .select("member_ready")
     .eq("id", roundId)
-    .maybeSingle();
+    .limit(1);
 
-  const currentReady = (round?.member_ready || []) as string[];
+  const currentReady = (roundRows?.[0]?.member_ready || []) as string[];
   if (currentReady.includes(memberName)) return true;
 
   const updated = [...currentReady, memberName];
@@ -699,13 +700,13 @@ export async function markMemberReady(roundId: string, memberName: string): Prom
 export async function unmarkMemberReady(roundId: string, memberName: string): Promise<boolean> {
   if (!isSupabaseConfigured() || !supabase) return false;
 
-  const { data: round } = await supabase
+  const { data: roundRows } = await supabase
     .from("feedback_rounds")
     .select("member_ready")
     .eq("id", roundId)
-    .maybeSingle();
+    .limit(1);
 
-  const currentReady = (round?.member_ready || []) as string[];
+  const currentReady = (roundRows?.[0]?.member_ready || []) as string[];
   const updated = currentReady.filter(m => m !== memberName);
 
   const { error } = await supabase

@@ -73,17 +73,18 @@ export async function getSessions(): Promise<StoredSession[]> {
 export async function getSession(id: string): Promise<StoredSession | null> {
   if (!isSupabaseConfigured() || !supabase) return null;
 
-  const { data, error } = await supabase
+  const { data: rows, error } = await supabase
     .from("sessions")
     .select("*")
     .eq("id", id)
-    .maybeSingle();
+    .limit(1);
 
   if (error) {
     console.error("Error fetching session:", error);
     return null;
   }
 
+  const data = rows?.[0];
   if (!data) return null;
 
   return {
@@ -284,18 +285,19 @@ export async function getAnalysis(
 ): Promise<StoredAnalysis | null> {
   if (!isSupabaseConfigured() || !supabase) return null;
 
-  const { data, error } = await supabase
+  const { data: rows, error } = await supabase
     .from("analyses")
     .select("*")
     .eq("session_id", sessionId)
     .eq("question_type", questionType)
-    .maybeSingle();
+    .limit(1);
 
   if (error) {
     console.error("Error fetching analysis:", error);
     return null;
   }
 
+  const data = rows?.[0];
   if (!data) return null;
 
   return {
@@ -559,18 +561,19 @@ export async function getApprovedText(
 ): Promise<StoredApprovedText | null> {
   if (!isSupabaseConfigured() || !supabase) return null;
 
-  const { data, error } = await supabase
+  const { data: rows, error } = await supabase
     .from("approved_texts")
     .select("*")
     .eq("session_id", sessionId)
     .eq("question_type", questionType)
-    .maybeSingle();
+    .limit(1);
 
   if (error) {
     console.error("Error fetching approved text:", error);
     return null;
   }
 
+  const data = rows?.[0];
   if (!data) return null;
 
   return {

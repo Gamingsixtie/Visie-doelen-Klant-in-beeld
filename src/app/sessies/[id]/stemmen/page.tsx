@@ -45,12 +45,13 @@ export default function StemmenPage() {
       }
 
       // Get session
-      const { data: session } = await supabase
+      const { data: sessionRows } = await supabase
         .from("sessions")
         .select("name, flow_state")
         .eq("id", sessionId)
-        .maybeSingle();
+        .limit(1);
 
+      const session = sessionRows?.[0];
       if (!session) {
         setError("Sessie niet gevonden");
         return;
@@ -160,12 +161,13 @@ export default function StemmenPage() {
     const freshVotes = await dotVotingService.getAllVotesMap(sessionId);
 
     // Update session flow_state with allVotes
-    const { data: session } = await supabase
+    const { data: sessionRows } = await supabase
       .from("sessions")
       .select("flow_state")
       .eq("id", sessionId)
-      .maybeSingle();
+      .limit(1);
 
+    const session = sessionRows?.[0];
     if (!session) return;
 
     const flowState = session.flow_state as Record<string, unknown>;

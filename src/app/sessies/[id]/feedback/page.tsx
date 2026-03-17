@@ -65,9 +65,9 @@ export default function FeedbackPage() {
       .from("sessions")
       .select("name")
       .eq("id", sessionId)
-      .maybeSingle()
+      .limit(1)
       .then(({ data }) => {
-        if (data) setSessionName(data.name);
+        if (data?.[0]) setSessionName(data[0].name);
       });
   }, [sessionId]);
 
@@ -292,12 +292,13 @@ export default function FeedbackPage() {
 
       // Save updated clusters to Supabase session flow_state (step-type aware)
       if (supabase) {
-        const { data: session } = await supabase
+        const { data: sessionRows } = await supabase
           .from("sessions")
           .select("flow_state")
           .eq("id", sessionId)
-          .maybeSingle();
+          .limit(1);
 
+        const session = sessionRows?.[0];
         if (session?.flow_state) {
           const flowState = session.flow_state as Record<string, unknown>;
 
@@ -577,12 +578,13 @@ export default function FeedbackPage() {
 
     // Get the latest data from Supabase (after apply, clusters may have changed)
     if (!supabase) return;
-    const { data: session } = await supabase
+    const { data: sessionRows } = await supabase
       .from("sessions")
       .select("flow_state")
       .eq("id", sessionId)
-      .maybeSingle();
+      .limit(1);
 
+    const session = sessionRows?.[0];
     if (!session?.flow_state) return;
 
     const flowState = session.flow_state as Record<string, unknown>;

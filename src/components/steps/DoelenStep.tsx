@@ -145,12 +145,13 @@ export function DoelenStep({ onComplete, readOnly: readOnlyProp }: DoelenStepPro
 
       try {
         console.log("[DoelenStep] Loading from Supabase for session:", currentSession.id);
-        const { data: session, error } = await supabase
+        const { data: sessionRows, error } = await supabase
           .from("sessions")
           .select("flow_state")
           .eq("id", currentSession.id)
-          .maybeSingle();
+          .limit(1);
 
+        const session = sessionRows?.[0];
         console.log("[DoelenStep] Supabase response:", {
           hasData: !!session,
           hasFlowState: !!session?.flow_state,
@@ -253,12 +254,13 @@ export function DoelenStep({ onComplete, readOnly: readOnlyProp }: DoelenStepPro
       if (document.visibilityState === "visible" && supabase) {
         console.log("[DoelenStep] Page visible, reloading from Supabase...");
         try {
-          const { data: session } = await supabase
+          const { data: sessionRows } = await supabase
             .from("sessions")
             .select("flow_state")
             .eq("id", currentSession.id)
-            .maybeSingle();
+            .limit(1);
 
+          const session = sessionRows?.[0];
           if (session?.flow_state) {
             const flowState = session.flow_state as Record<string, unknown>;
             const goalClusters = flowState.goalClusters as Record<string, unknown> | undefined;
