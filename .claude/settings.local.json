@@ -1,29 +1,16 @@
 {
   "permissions": {
     "allow": [
-      "Bash(npm run dev:*)",
-      "Bash(cat:*)",
-      "Bash(ls:*)",
-      "Bash(unzip:*)",
+      "Bash(git clone:*)",
+      "Bash(npm install)",
+      "Bash(cd:*)",
+      "Bash(npx tsc:*)",
       "Bash(git add:*)",
       "Bash(git commit:*)",
-      "Bash(git push:*)",
-      "Bash(git fetch:*)",
-      "Bash(git pull:*)",
-      "Bash(npm install)",
-      "Bash(curl:*)",
-      "Bash(ipconfig:*)",
-      "Bash(findstr:*)",
-      "Bash(powershell -Command:*)",
-      "Bash(npx tsc:*)",
-      "mcp__ide__getDiagnostics",
-      "Bash(vercel:*)",
+      "Bash(git push)",
       "WebFetch(domain:klant-in-beeld.vercel.app)",
-      "Bash(printf:*)",
-      "Bash(timeout 20 vercel logs:*)",
-      "Bash(timeout 60 vercel logs:*)",
-      "Bash(timeout 30 vercel logs:*)",
-      "Bash(grep:*)"
+      "Bash(npm run build:*)",
+      "Bash(cat:*)"
     ]
   }
 }

@@ -350,6 +350,13 @@ export default function FeedbackPage() {
 
       // Sync updated clusters to localStorage for DoelenStep persistence
       if (stepType === "doelen") {
+        console.log("[Feedback] Saving to localStorage:", {
+          sessionId,
+          clusterCount: updatedClusters.length,
+          clusters: updatedClusters.map(c => ({ id: c.id, name: c.name })),
+          approvedChangeIds
+        });
+
         const existingData = persistence.getGoalClusters(sessionId);
         persistence.saveGoalClusters(sessionId, {
           clusters: updatedClusters,
@@ -358,6 +365,13 @@ export default function FeedbackPage() {
           ranking: existingData?.ranking || [],
           formulations: existingData?.formulations || {},
           phase: existingData?.phase || "clusters"
+        });
+
+        // Verify it was saved
+        const verified = persistence.getGoalClusters(sessionId);
+        console.log("[Feedback] Verified localStorage save:", {
+          savedAt: verified?.savedAt,
+          clusterCount: verified?.clusters.length
         });
 
         persistence.saveClusterVersion(

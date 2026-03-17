@@ -129,9 +129,21 @@ export function DoelenStep({ onComplete, readOnly: readOnlyProp }: DoelenStepPro
     const savedTimestamp = saved?.savedAt?.getTime() || 0;
     const hasNewerData = savedTimestamp > lastLoadedTimestamp;
 
+    console.log("[DoelenStep] Loading check:", {
+      sessionId: currentSession.id,
+      savedClusters: saved?.clusters.length || 0,
+      savedTimestamp,
+      lastLoadedTimestamp,
+      hasNewerData,
+      hasLoadedFromPersistence,
+      forceReload,
+      currentClusters: clusters.length,
+      clusterNames: saved?.clusters.slice(0, 3).map((c: { name?: string }) => c.name)
+    });
+
     // Try localStorage first
     if (saved && saved.clusters.length > 0 && (forceReload || !hasLoadedFromPersistence || hasNewerData)) {
-      console.log("Loading goal clusters from localStorage:", saved.clusters.length, "clusters", hasNewerData ? "(newer data detected)" : "");
+      console.log("[DoelenStep] Loading from localStorage:", saved.clusters.length, "clusters", hasNewerData ? "(newer data)" : "");
       updateDoelenStepState({
         clusters: saved.clusters as GoalClusterType[],
         selectedClusterIds: saved.selectedClusterIds,
