@@ -18,6 +18,7 @@ import { RefineWithAI } from "@/components/ui/RefineWithAI";
 import { MT_MEMBERS, FACILITATOR_NAME } from "@/lib/types";
 import * as persistence from "@/lib/persistence";
 import { updateActiveRoundSourceClusters } from "@/lib/feedback-service";
+import { supabase } from "@/lib/supabase";
 
 interface DoelenStepProps {
   onComplete: () => void;
@@ -116,38 +117,83 @@ export function DoelenStep({ onComplete, readOnly: readOnlyProp }: DoelenStepPro
     }
   }, [getApprovedText]);
 
-  // Load goal clusters from persistence on mount
+  // Load goal clusters from persistence on mount (with Supabase fallback)
   const [hasLoadedFromPersistence, setHasLoadedFromPersistence] = useState(false);
   const [lastLoadedTimestamp, setLastLoadedTimestamp] = useState<number>(0);
 
   useEffect(() => {
     if (!currentSession || isReadOnly) return;
 
-    const saved = persistence.getGoalClusters(currentSession.id);
-    if (!saved || saved.clusters.length === 0) {
-      if (clusters.length === 0) {
+    const loadClusters = async () => {
+      const saved = persistence.getGoalClusters(currentSession.id);
+      const savedTimestamp = saved?.savedAt?.getTime() || 0;
+      const hasNewerData = savedTimestamp > lastLoadedTimestamp;
+
+      // Try localStorage first
+      if (saved && saved.clusters.length > 0 && (!hasLoadedFromPersistence || hasNewerData)) {
+        console.log("Loading goal clusters from localStorage:", saved.clusters.length, "clusters", hasNewerData ? "(newer data detected)" : "");
+        updateDoelenStepState({
+          clusters: saved.clusters as GoalClusterType[],
+          selectedClusterIds: saved.selectedClusterIds,
+          allVotes: saved.allVotes,
+          ranking: saved.ranking,
+          formulations: saved.formulations,
+          phase: saved.phase as DoelenStepPhase
+        });
         setHasLoadedFromPersistence(true);
+        setLastLoadedTimestamp(savedTimestamp);
+        return;
       }
-      return;
-    }
 
-    // Check if localStorage has newer data (e.g., from feedback approval)
-    const savedTimestamp = saved.savedAt?.getTime() || 0;
-    const hasNewerData = savedTimestamp > lastLoadedTimestamp;
+      // Fallback to Supabase if localStorage is empty/missing
+      if (!saved || saved.clusters.length === 0) {
+        if (supabase) {
+          console.log("localStorage empty, trying Supabase fallback...");
+          const { data: session } = await supabase
+            .from("sessions")
+            .select("flow_state")
+            .eq("id", currentSession.id)
+            .single();
 
-    if (!hasLoadedFromPersistence || hasNewerData) {
-      console.log("Loading goal clusters from persistence:", saved.clusters.length, "clusters", hasNewerData ? "(newer data detected)" : "");
-      updateDoelenStepState({
-        clusters: saved.clusters as GoalClusterType[],
-        selectedClusterIds: saved.selectedClusterIds,
-        allVotes: saved.allVotes,
-        ranking: saved.ranking,
-        formulations: saved.formulations,
-        phase: saved.phase as DoelenStepPhase
-      });
-      setHasLoadedFromPersistence(true);
-      setLastLoadedTimestamp(savedTimestamp);
-    }
+          if (session?.flow_state) {
+            const flowState = session.flow_state as Record<string, unknown>;
+            const goalClusters = flowState.goalClusters as Record<string, unknown> | undefined;
+
+            if (goalClusters && Array.isArray(goalClusters.clusters) && goalClusters.clusters.length > 0) {
+              console.log("Loading goal clusters from Supabase:", goalClusters.clusters.length, "clusters");
+
+              // Save to localStorage for future use
+              persistence.saveGoalClusters(currentSession.id, {
+                clusters: goalClusters.clusters,
+                selectedClusterIds: (goalClusters.selectedClusterIds as string[]) || [],
+                allVotes: (goalClusters.allVotes as Record<string, Record<string, number>>) || {},
+                ranking: (goalClusters.ranking as string[]) || [],
+                formulations: (goalClusters.formulations as Record<string, string>) || {},
+                phase: (goalClusters.phase as string) || "clusters"
+              });
+
+              updateDoelenStepState({
+                clusters: goalClusters.clusters as GoalClusterType[],
+                selectedClusterIds: (goalClusters.selectedClusterIds as string[]) || [],
+                allVotes: (goalClusters.allVotes as Record<string, Record<string, number>>) || {},
+                ranking: (goalClusters.ranking as string[]) || [],
+                formulations: (goalClusters.formulations as Record<string, string>) || {},
+                phase: (goalClusters.phase as DoelenStepPhase) || "clusters"
+              });
+              setHasLoadedFromPersistence(true);
+              setLastLoadedTimestamp(Date.now());
+              return;
+            }
+          }
+        }
+
+        if (clusters.length === 0) {
+          setHasLoadedFromPersistence(true);
+        }
+      }
+    };
+
+    loadClusters();
 
     // Load cluster version history
     const versions = persistence.getClusterVersions(currentSession.id);
