@@ -33,7 +33,8 @@ const STORAGE_KEYS = {
   FLOW_STATES: "kib_flow_states",
   GENERATED_VISION: "kib_generated_vision",
   GOAL_CLUSTERS: "kib_goal_clusters",
-  GOAL_CLUSTER_VERSIONS: "kib_goal_cluster_versions"
+  GOAL_CLUSTER_VERSIONS: "kib_goal_cluster_versions",
+  SCOPE_ITEMS: "kib_scope_items"
 };
 
 // === HELPER FUNCTIONS ===
@@ -275,6 +276,18 @@ export async function initFromSupabase(): Promise<boolean> {
           if (newVersions.length > 0) {
             setInStorage(STORAGE_KEYS.GOAL_CLUSTER_VERSIONS, [...existing, ...newVersions]);
             console.log(`[Supabase] Loaded ${newVersions.length} cluster versions for session ${s.id}`);
+          }
+        }
+
+        // Extract scopeItems
+        if (combined.scopeItems && Array.isArray(combined.scopeItems)) {
+          const items = combined.scopeItems as StoredScopeItem[];
+          const existing = getFromStorage<StoredScopeItemsData>(STORAGE_KEYS.SCOPE_ITEMS);
+          const alreadyExists = existing.some(d => d.sessionId === s.id);
+          if (!alreadyExists && items.length > 0) {
+            existing.push({ sessionId: s.id, items, savedAt: new Date() });
+            setInStorage(STORAGE_KEYS.SCOPE_ITEMS, existing);
+            console.log(`[Supabase] Loaded ${items.length} scope items for session ${s.id}`);
           }
         }
       }
@@ -824,6 +837,11 @@ function syncExtraDataToSupabase(sessionId: string): void {
   const versions = getFromStorage<ClusterVersion>(STORAGE_KEYS.GOAL_CLUSTER_VERSIONS).filter(v => v.sessionId === sessionId);
   if (versions.length > 0) combined.goalClusterVersions = versions;
 
+  // Include scope items
+  const scopeData = getFromStorage<StoredScopeItemsData>(STORAGE_KEYS.SCOPE_ITEMS);
+  const si = scopeData.find(s => s.sessionId === sessionId);
+  if (si) combined.scopeItems = si.items;
+
   sbUpdate('sessions', sessionId, { flow_state: combined });
 }
 
@@ -1059,5 +1077,42 @@ export function clearClusterVersions(sessionId: string): void {
   const allVersions = getFromStorage<ClusterVersion>(STORAGE_KEYS.GOAL_CLUSTER_VERSIONS);
   const filtered = allVersions.filter((v) => v.sessionId !== sessionId);
   setInStorage(STORAGE_KEYS.GOAL_CLUSTER_VERSIONS, filtered);
+  syncExtraDataToSupabase(sessionId);
+}
+
+// === SCOPE ITEMS ===
+
+export interface StoredScopeItem {
+  id: string;
+  text: string;
+  source: string;
+}
+
+interface StoredScopeItemsData {
+  sessionId: string;
+  items: StoredScopeItem[];
+  savedAt: Date;
+}
+
+export function saveScopeItems(sessionId: string, items: StoredScopeItem[]): void {
+  const allData = getFromStorage<StoredScopeItemsData>(STORAGE_KEYS.SCOPE_ITEMS);
+  const filtered = allData.filter((d) => d.sessionId !== sessionId);
+  filtered.push({ sessionId, items, savedAt: new Date() });
+  setInStorage(STORAGE_KEYS.SCOPE_ITEMS, filtered);
+
+  // Sync to Supabase via sessions.flow_state
+  syncExtraDataToSupabase(sessionId);
+}
+
+export function getScopeItems(sessionId: string): StoredScopeItem[] | null {
+  const allData = getFromStorage<StoredScopeItemsData>(STORAGE_KEYS.SCOPE_ITEMS);
+  const data = allData.find((d) => d.sessionId === sessionId);
+  return data ? data.items : null;
+}
+
+export function clearScopeItems(sessionId: string): void {
+  const allData = getFromStorage<StoredScopeItemsData>(STORAGE_KEYS.SCOPE_ITEMS);
+  const filtered = allData.filter((d) => d.sessionId !== sessionId);
+  setInStorage(STORAGE_KEYS.SCOPE_ITEMS, filtered);
   syncExtraDataToSupabase(sessionId);
 }

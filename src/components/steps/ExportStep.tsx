@@ -3,7 +3,7 @@
 import { useState, useEffect } from "react";
 import { useSession } from "@/lib/session-context";
 import { isSessionComplete } from "@/lib/types";
-import { FinalCelebration, triggerConfetti } from "@/components/celebration";
+import { FinalCelebration, triggerConfetti, ExportCelebration } from "@/components/celebration";
 import * as persistence from "@/lib/persistence";
 
 export function ExportStep() {
@@ -13,6 +13,7 @@ export function ExportStep() {
   const [downloadComplete, setDownloadComplete] = useState(false);
   const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
   const [sessionFinished, setSessionFinished] = useState(false);
+  const [showExportCelebration, setShowExportCelebration] = useState(false);
 
   const visieHuidige = getApprovedText("current_situation");
   const visieGewenste = getApprovedText("desired_situation");
@@ -138,12 +139,7 @@ export function ExportStep() {
       window.URL.revokeObjectURL(url);
 
       setDownloadComplete(true);
-
-      // Trigger confetti on successful download
-      triggerConfetti({
-        particleCount: 100,
-        spread: 70
-      });
+      setShowExportCelebration(true);
     } catch (error) {
       console.error("Export error:", error);
     } finally {
@@ -541,6 +537,14 @@ export function ExportStep() {
           <FinalCelebration
             achievements={achievements}
             onClose={handleCloseCelebration}
+          />
+        )}
+
+        {/* Export Success Celebration */}
+        {showExportCelebration && (
+          <ExportCelebration
+            sessionName={currentSession?.name}
+            onClose={() => setShowExportCelebration(false)}
           />
         )}
 

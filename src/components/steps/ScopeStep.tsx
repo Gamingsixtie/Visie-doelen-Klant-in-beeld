@@ -1,10 +1,11 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useSession } from "@/lib/session-context";
 import { useToast, ConfirmDialog, ActivityTimer, TIMER_PRESETS } from "@/components/ui";
 import { RefineWithAI } from "@/components/ui/RefineWithAI";
 import { AsyncFeedbackSection } from "@/components/feedback";
+import * as persistence from "@/lib/persistence";
 
 interface ScopeStepProps {
   onComplete: () => void;
@@ -36,48 +37,35 @@ export function ScopeStep({ onComplete, readOnly: readOnlyProp }: ScopeStepProps
     if (goal) approvedGoals.push(goal.text);
   });
 
-  // Check if already approved
-  useEffect(() => {
-    const approved = getApprovedText("out_of_scope");
-    if (approved) {
-      setIsApproved(true);
-    }
-  }, [getApprovedText]);
+  // Helper: persist scope items to localStorage + Supabase
+  const persistItems = useCallback((items: ScopeItem[]) => {
+    if (!currentSession) return;
+    persistence.saveScopeItems(currentSession.id, items);
+  }, [currentSession]);
 
-  // Collect initial scope items from documents
-  useEffect(() => {
+  // Derive scope items from documents (used as fallback when no saved items exist)
+  const deriveItemsFromDocuments = useCallback((): ScopeItem[] => {
     const items: ScopeItem[] = [];
     let idCounter = 0;
 
     documents.forEach((doc) => {
       if (doc.parsedResponses.out_of_scope) {
-        // Smart sentence splitting:
-        // 1. First split on newlines (each line is typically a separate item)
-        // 2. Then split on bullet points (-, •, *, numbered lists)
-        // 3. Only split on semicolons if they appear to end a sentence (followed by capital letter or end)
-        // 4. Do NOT split on commas within sentences
-
         let text = doc.parsedResponses.out_of_scope;
 
         // Normalize different bullet point styles
-        text = text.replace(/^[-•*]\s*/gm, '\n'); // Convert bullets to newlines
-        text = text.replace(/^\d+[.)]\s*/gm, '\n'); // Convert numbered lists to newlines
+        text = text.replace(/^[-•*]\s*/gm, '\n');
+        text = text.replace(/^\d+[.)]\s*/gm, '\n');
 
-        // Split on newlines and filter
         const parts = text
           .split(/\n+/)
           .map((s) => s.trim())
-          // Remove leading/trailing punctuation that doesn't belong
           .map((s) => s.replace(/^[;,.\s]+|[;,\s]+$/g, '').trim())
-          // Filter out items that are too short (likely fragments) or empty
-          .filter((s) => s.length >= 10); // Require at least 10 characters for a meaningful scope item
+          .filter((s) => s.length >= 10);
 
         parts.forEach((itemText) => {
-          // Check for duplicates (case-insensitive, fuzzy match)
           const normalizedText = itemText.toLowerCase().replace(/[^\w\s]/g, '');
           const exists = items.some((i) => {
             const normalizedExisting = i.text.toLowerCase().replace(/[^\w\s]/g, '');
-            // Check if texts are very similar (>80% overlap)
             return normalizedExisting === normalizedText ||
                    normalizedExisting.includes(normalizedText) ||
                    normalizedText.includes(normalizedExisting);
@@ -94,8 +82,32 @@ export function ScopeStep({ onComplete, readOnly: readOnlyProp }: ScopeStepProps
       }
     });
 
-    setScopeItems(items);
+    return items;
   }, [documents]);
+
+  // Load scope items: saved items first, fallback to document derivation
+  useEffect(() => {
+    const approved = getApprovedText("out_of_scope");
+    if (approved) {
+      setIsApproved(true);
+      return;
+    }
+
+    if (!currentSession) return;
+
+    // Try loading saved scope items first
+    const savedItems = persistence.getScopeItems(currentSession.id);
+    if (savedItems && savedItems.length > 0) {
+      setScopeItems(savedItems);
+    } else {
+      // Fallback: derive from documents
+      const derived = deriveItemsFromDocuments();
+      setScopeItems(derived);
+      if (derived.length > 0) {
+        persistence.saveScopeItems(currentSession.id, derived);
+      }
+    }
+  }, [currentSession, getApprovedText, deriveItemsFromDocuments]);
 
   const handleAddItem = () => {
     if (!newItemText.trim()) return;
@@ -105,13 +117,17 @@ export function ScopeStep({ onComplete, readOnly: readOnlyProp }: ScopeStepProps
       text: newItemText.trim(),
       source: "Handmatig toegevoegd"
     };
-    setScopeItems([...scopeItems, newItem]);
+    const updated = [...scopeItems, newItem];
+    setScopeItems(updated);
+    persistItems(updated);
     setNewItemText("");
     showToast("Item toegevoegd", "success");
   };
 
   const handleRemoveItem = (id: string) => {
-    setScopeItems(scopeItems.filter((item) => item.id !== id));
+    const updated = scopeItems.filter((item) => item.id !== id);
+    setScopeItems(updated);
+    persistItems(updated);
   };
 
   const handleEditStart = (item: ScopeItem) => {
@@ -122,11 +138,11 @@ export function ScopeStep({ onComplete, readOnly: readOnlyProp }: ScopeStepProps
   const handleEditSave = () => {
     if (!editingId || !editText.trim()) return;
 
-    setScopeItems(
-      scopeItems.map((item) =>
-        item.id === editingId ? { ...item, text: editText.trim() } : item
-      )
+    const updated = scopeItems.map((item) =>
+      item.id === editingId ? { ...item, text: editText.trim() } : item
     );
+    setScopeItems(updated);
+    persistItems(updated);
     setEditingId(null);
     setEditText("");
   };
@@ -207,6 +223,23 @@ export function ScopeStep({ onComplete, readOnly: readOnlyProp }: ScopeStepProps
                 <button
                   onClick={() => {
                     removeApprovedText("out_of_scope");
+                    // Restore items from persistence (which has the edited versions)
+                    if (currentSession) {
+                      const savedItems = persistence.getScopeItems(currentSession.id);
+                      if (savedItems && savedItems.length > 0) {
+                        setScopeItems(savedItems);
+                      } else if (approved) {
+                        // Parse approved text back into items as fallback
+                        const lines = approved.text.split("\n").filter((l: string) => l.trim());
+                        const parsed = lines.map((line: string, idx: number) => ({
+                          id: `scope-restored-${idx}`,
+                          text: line.replace(/^[•\-*]\s*/, "").trim(),
+                          source: "Eerder goedgekeurd"
+                        }));
+                        setScopeItems(parsed);
+                        persistItems(parsed);
+                      }
+                    }
                     setIsApproved(false);
                     showToast("Scope vrijgegeven voor bewerking", "info");
                   }}
@@ -340,11 +373,11 @@ export function ScopeStep({ onComplete, readOnly: readOnlyProp }: ScopeStepProps
                               currentText={item.text}
                               context="Scope-afbakening: item dat buiten scope valt voor het programma Klant in Beeld"
                               onRefined={(newText) => {
-                                setScopeItems(
-                                  scopeItems.map((si) =>
-                                    si.id === item.id ? { ...si, text: newText } : si
-                                  )
+                                const updated = scopeItems.map((si) =>
+                                  si.id === item.id ? { ...si, text: newText } : si
                                 );
+                                setScopeItems(updated);
+                                persistItems(updated);
                               }}
                               label="Verfijn formulering"
                               undoKey={`scope-item-${item.id}`}
