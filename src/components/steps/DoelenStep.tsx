@@ -1621,16 +1621,18 @@ export function DoelenStep({ onComplete, readOnly: readOnlyProp }: DoelenStepPro
               )}
             </div>
 
-            {/* Async feedback button */}
-            {!isReadOnly && currentSession && clusters.length > 0 && (
+            {/* Async feedback button - only for selected clusters */}
+            {!isReadOnly && currentSession && clusters.length > 0 && selectedClusterIds.length > 0 && (
               <AsyncFeedbackSection
                 sessionId={currentSession.id}
-                sourceData={clusters.map(c => ({
-                  id: c.id,
-                  name: c.name,
-                  description: c.description,
-                  goals: c.goals || []
-                }))}
+                sourceData={clusters
+                  .filter(c => selectedClusterIds.includes(c.id))
+                  .map(c => ({
+                    id: c.id,
+                    name: c.name,
+                    description: c.description,
+                    goals: c.goals || []
+                  }))}
                 stepType="doelen"
                 showToast={showToast}
               />
