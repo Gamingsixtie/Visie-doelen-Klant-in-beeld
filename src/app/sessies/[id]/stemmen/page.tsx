@@ -49,7 +49,7 @@ export default function StemmenPage() {
         .from("sessions")
         .select("name, flow_state")
         .eq("id", sessionId)
-        .single();
+        .maybeSingle();
 
       if (!session) {
         setError("Sessie niet gevonden");
@@ -164,7 +164,7 @@ export default function StemmenPage() {
       .from("sessions")
       .select("flow_state")
       .eq("id", sessionId)
-      .single();
+      .maybeSingle();
 
     if (!session) return;
 

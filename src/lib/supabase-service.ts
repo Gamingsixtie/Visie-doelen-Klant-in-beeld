@@ -77,12 +77,14 @@ export async function getSession(id: string): Promise<StoredSession | null> {
     .from("sessions")
     .select("*")
     .eq("id", id)
-    .single();
+    .maybeSingle();
 
   if (error) {
     console.error("Error fetching session:", error);
     return null;
   }
+
+  if (!data) return null;
 
   return {
     id: data.id,
@@ -287,15 +289,14 @@ export async function getAnalysis(
     .select("*")
     .eq("session_id", sessionId)
     .eq("question_type", questionType)
-    .single();
+    .maybeSingle();
 
   if (error) {
-    if (error.code !== "PGRST116") {
-      // Not found is ok
-      console.error("Error fetching analysis:", error);
-    }
+    console.error("Error fetching analysis:", error);
     return null;
   }
+
+  if (!data) return null;
 
   return {
     id: data.id,
@@ -563,14 +564,14 @@ export async function getApprovedText(
     .select("*")
     .eq("session_id", sessionId)
     .eq("question_type", questionType)
-    .single();
+    .maybeSingle();
 
   if (error) {
-    if (error.code !== "PGRST116") {
-      console.error("Error fetching approved text:", error);
-    }
+    console.error("Error fetching approved text:", error);
     return null;
   }
+
+  if (!data) return null;
 
   return {
     id: data.id,

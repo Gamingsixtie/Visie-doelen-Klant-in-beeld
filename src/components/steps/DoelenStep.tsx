@@ -149,7 +149,7 @@ export function DoelenStep({ onComplete, readOnly: readOnlyProp }: DoelenStepPro
           .from("sessions")
           .select("flow_state")
           .eq("id", currentSession.id)
-          .single();
+          .maybeSingle();
 
         console.log("[DoelenStep] Supabase response:", {
           hasData: !!session,
@@ -257,7 +257,7 @@ export function DoelenStep({ onComplete, readOnly: readOnlyProp }: DoelenStepPro
             .from("sessions")
             .select("flow_state")
             .eq("id", currentSession.id)
-            .single();
+            .maybeSingle();
 
           if (session?.flow_state) {
             const flowState = session.flow_state as Record<string, unknown>;

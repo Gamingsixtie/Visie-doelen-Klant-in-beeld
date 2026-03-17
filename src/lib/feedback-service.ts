@@ -160,10 +160,9 @@ export async function getLatestOpenRound(sessionId: string): Promise<FeedbackRou
     .in("phase", ["collecting", "consolidating", "voting"])
     .order("created_at", { ascending: false })
     .limit(1)
-    .single();
+    .maybeSingle();
 
   if (error) {
-    if (error.code === "PGRST116") return null; // No rows
     console.error("Error fetching latest open round:", error);
     return null;
   }
@@ -324,7 +323,7 @@ export async function getFullRoundData(roundId: string): Promise<FullRoundData |
     .from("feedback_rounds")
     .select("*")
     .eq("id", roundId)
-    .single();
+    .maybeSingle();
 
   if (roundError || !round) return null;
 
@@ -470,7 +469,7 @@ export async function saveConsolidatedChangesWithHistory(
     .from("feedback_rounds")
     .select("consolidated_changes, consolidated_changes_history")
     .eq("id", roundId)
-    .single();
+    .maybeSingle();
 
   if (fetchError || !round) {
     console.error("Error fetching round for history:", fetchError);
@@ -518,7 +517,7 @@ export async function restoreConsolidatedChangesVersion(
     .from("feedback_rounds")
     .select("consolidated_changes, consolidated_changes_history")
     .eq("id", roundId)
-    .single();
+    .maybeSingle();
 
   if (fetchError || !round) return null;
 
@@ -660,10 +659,9 @@ export async function getActiveRound(sessionId: string, stepType?: FeedbackStepT
   const { data, error } = await query
     .order("created_at", { ascending: false })
     .limit(1)
-    .single();
+    .maybeSingle();
 
   if (error) {
-    if (error.code === "PGRST116") return null;
     console.error("Error fetching active round:", error);
     return null;
   }
@@ -680,7 +678,7 @@ export async function markMemberReady(roundId: string, memberName: string): Prom
     .from("feedback_rounds")
     .select("member_ready")
     .eq("id", roundId)
-    .single();
+    .maybeSingle();
 
   const currentReady = (round?.member_ready || []) as string[];
   if (currentReady.includes(memberName)) return true;
@@ -705,7 +703,7 @@ export async function unmarkMemberReady(roundId: string, memberName: string): Pr
     .from("feedback_rounds")
     .select("member_ready")
     .eq("id", roundId)
-    .single();
+    .maybeSingle();
 
   const currentReady = (round?.member_ready || []) as string[];
   const updated = currentReady.filter(m => m !== memberName);

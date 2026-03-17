@@ -65,7 +65,7 @@ export default function FeedbackPage() {
       .from("sessions")
       .select("name")
       .eq("id", sessionId)
-      .single()
+      .maybeSingle()
       .then(({ data }) => {
         if (data) setSessionName(data.name);
       });
@@ -296,7 +296,7 @@ export default function FeedbackPage() {
           .from("sessions")
           .select("flow_state")
           .eq("id", sessionId)
-          .single();
+          .maybeSingle();
 
         if (session?.flow_state) {
           const flowState = session.flow_state as Record<string, unknown>;
@@ -581,7 +581,7 @@ export default function FeedbackPage() {
       .from("sessions")
       .select("flow_state")
       .eq("id", sessionId)
-      .single();
+      .maybeSingle();
 
     if (!session?.flow_state) return;
 
