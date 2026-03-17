@@ -188,8 +188,8 @@ export default function FeedbackPage() {
     }
   };
 
-  // Handle AI consolidation (facilitator only)
-  const handleConsolidate = async () => {
+  // Handle AI consolidation (facilitator only) - with optional type filter
+  const handleConsolidate = async (selectedTypes?: feedbackService.SuggestionType[]) => {
     if (!round || !isFacilitator) return;
     setIsConsolidating(true);
 
@@ -197,6 +197,11 @@ export default function FeedbackPage() {
       // Set phase to consolidating
       await feedbackService.updateRoundPhase(round.id, "consolidating");
       setRound(prev => prev ? { ...prev, phase: "consolidating" } : null);
+
+      // Filter suggestions by selected types
+      const filteredSuggestions = selectedTypes
+        ? suggestions.filter(s => selectedTypes.includes(s.suggestion_type as feedbackService.SuggestionType))
+        : suggestions;
 
       // Call AI consolidation API
       const response = await fetch("/api/consolidate-feedback", {
@@ -209,7 +214,7 @@ export default function FeedbackPage() {
             description: c.description,
             goals: c.goals
           })),
-          suggestions: suggestions.map(s => ({
+          suggestions: filteredSuggestions.map(s => ({
             id: s.id,
             member_name: s.member_name,
             cluster_id: s.cluster_id,
@@ -744,6 +749,11 @@ export default function FeedbackPage() {
           phase={phase}
           isFacilitator={isFacilitator}
           suggestionsCount={suggestions.length}
+          suggestionsByType={{
+            text_edit: suggestions.filter(s => s.suggestion_type === "text_edit").length,
+            merge: suggestions.filter(s => s.suggestion_type === "merge").length,
+            comment: suggestions.filter(s => s.suggestion_type === "comment").length,
+          }}
           changes={proposedChanges}
           changeVotes={changeVotes}
           onStartConsolidation={handleConsolidate}
