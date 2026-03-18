@@ -303,12 +303,23 @@ export function DoelenStep({ onComplete, readOnly: readOnlyProp }: DoelenStepPro
     });
   }, [currentSession, clusters, selectedClusterIds, allVotes, ranking, formulations, phase, isReadOnly]);
 
+  // Auto-fix: if clusters exist but phase is still "overview", jump to "clusters" phase
+  useEffect(() => {
+    if (!currentSession || isReadOnly) return;
+    if (clusters.length === 0) return;
+    if (!isInitialLoadComplete.current) return;
+    if (phase !== "overview") return;
+
+    console.log("[DoelenStep] Clusters exist but phase is 'overview' — auto-fixing to 'clusters'");
+    setPhase("clusters");
+  }, [currentSession, clusters.length, isReadOnly, phase, setPhase]);
+
   // Auto-complete doelen step when clusters exist — ensures you can always navigate to scope
   useEffect(() => {
     if (!currentSession || isReadOnly) return;
     if (clusters.length === 0) return;
     if (!isInitialLoadComplete.current) return;
-    if (flowState.steps.doelen === "completed") return; // Already completed
+    if (flowState.steps.doelen === "completed") return;
 
     console.log("[DoelenStep] Clusters exist, auto-completing doelen step");
     completeStep("doelen");
