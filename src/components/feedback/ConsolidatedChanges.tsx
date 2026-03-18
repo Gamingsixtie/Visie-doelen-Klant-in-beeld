@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo } from "react";
-import type { ProposedChange, ChangeVote, ChangeVoteValue } from "@/lib/feedback-service";
+import type { ProposedChange, ChangeVote, ChangeVoteValue, FeedbackSuggestion } from "@/lib/feedback-service";
 import { MT_MEMBERS } from "@/lib/types";
 
 type ChangeTypeFilter = "edit" | "merge" | "comment_only";
@@ -20,6 +20,7 @@ interface ConsolidatedChangesProps {
   onEditChange?: (changeId: string, updates: Partial<ProposedChange>) => void;
   onRefineChange?: (changeId: string, feedback: string) => Promise<void>;
   onDeleteChange?: (changeId: string) => void;
+  suggestions?: FeedbackSuggestion[];
 }
 
 const TYPE_FILTER_CONFIG: { type: ChangeTypeFilter; label: string; icon: string; activeClass: string; inactiveClass: string }[] = [
@@ -39,7 +40,8 @@ export function ConsolidatedChanges({
   isFacilitator,
   onEditChange,
   onRefineChange,
-  onDeleteChange
+  onDeleteChange,
+  suggestions
 }: ConsolidatedChangesProps) {
   // Filter & sort state
   const [activeTypes, setActiveTypes] = useState<Set<ChangeTypeFilter>>(new Set(["edit", "merge", "comment_only"]));
@@ -143,6 +145,7 @@ export function ConsolidatedChanges({
       onEditChange={onEditChange}
       onRefineChange={onRefineChange}
       onDeleteChange={onDeleteChange}
+      suggestions={suggestions}
     />
   );
 
@@ -359,7 +362,8 @@ function ChangeCard({
   isFacilitator,
   onEditChange,
   onRefineChange,
-  onDeleteChange
+  onDeleteChange,
+  suggestions
 }: {
   change: ProposedChange;
   votes: ChangeVote[];
@@ -370,6 +374,7 @@ function ChangeCard({
   onEditChange?: (changeId: string, updates: Partial<ProposedChange>) => void;
   onRefineChange?: (changeId: string, feedback: string) => Promise<void>;
   onDeleteChange?: (changeId: string) => void;
+  suggestions?: FeedbackSuggestion[];
 }) {
   const [showCommentFor, setShowCommentFor] = useState<"disagree" | "abstain" | null>(null);
   const [voteComment, setVoteComment] = useState("");
@@ -638,8 +643,34 @@ function ChangeCard({
         )}
 
         {!nameChanged && !descChanged && change.change_type === "comment_only" && (
-          <div className="text-sm text-gray-500 italic">
-            Geen tekstwijziging - alleen opmerkingen geregistreerd.
+          <div className="space-y-2">
+            {/* Show source comments */}
+            {(() => {
+              const sourceComments = suggestions?.filter(s =>
+                change.source_suggestions.includes(s.id) ||
+                (s.cluster_id === change.cluster_id && s.suggestion_type === "comment")
+              ) || [];
+              if (sourceComments.length > 0) {
+                return (
+                  <div className="space-y-1.5">
+                    <p className="text-xs font-medium text-gray-500 uppercase">Opmerkingen</p>
+                    {sourceComments.map(s => (
+                      <div key={s.id} className="text-sm px-3 py-2 bg-gray-50 rounded-lg border border-gray-200">
+                        <span className="font-medium text-gray-700">{s.member_name}:</span>{" "}
+                        <span className="text-gray-600">{(s.content as Record<string, unknown>).text as string}</span>
+                      </div>
+                    ))}
+                  </div>
+                );
+              }
+              return null;
+            })()}
+            <div className="flex items-center gap-2 text-xs text-gray-400 bg-gray-50 rounded-lg px-3 py-2 border border-dashed border-gray-200">
+              <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+              </svg>
+              <span>Geen tekstwijziging — deze opmerkingen worden genoteerd maar veranderen niets aan de doeltekst bij doorvoeren.</span>
+            </div>
           </div>
         )}
 

@@ -324,9 +324,9 @@ Analyseer alle feedback en stel concrete wijzigingen voor. Volg deze regels STRI
    - Bij doelstellingen: zo geformuleerd dat je er gewenste effecten, benodigde vermogens en concrete inspanningen uit kunt afleiden
 
 WIJZIGINGSTYPEN:
-- "edit": Tekstuele aanpassing van naam en/of beschrijving
+- "edit": Tekstuele aanpassing van naam en/of beschrijving. Gebruik dit type ook voor opmerkingen die inhoudelijk relevant zijn — vertaal de opmerking naar een concreet tekstvoorstel zodat de facilitator kan zien wat er precies zou veranderen. Geef in de rationale aan dat dit gebaseerd is op een opmerking (niet op een expliciete tekstwijziging).
 - "merge": Samenvoegen van twee of meer clusters (als feedback hier expliciet om vraagt)
-- "comment_only": Alleen opmerkingen, geen tekstwijziging nodig (wel documenteren)
+- "comment_only": ALLEEN gebruiken als de opmerking puur informatief is en zich niet laat vertalen naar een tekstwijziging (bijv. "goed zo", "eens", of vragen die geen tekstimpact hebben). Bij twijfel: maak een "edit" voorstel zodat het team kan stemmen.
 
 Retourneer JSON in dit formaat:
 {
@@ -432,9 +432,9 @@ Analyseer alle feedback en stel concrete wijzigingen voor. Volg deze regels STRI
    - Past bij "Werken aan programma's" methodiek (Prevaas & Van Loon)
 
 WIJZIGINGSTYPEN:
-- "edit": Tekstuele aanpassing van naam en/of beschrijving
+- "edit": Tekstuele aanpassing van naam en/of beschrijving. Gebruik dit type ook voor opmerkingen die inhoudelijk relevant zijn — vertaal de opmerking naar een concreet tekstvoorstel zodat de facilitator kan zien wat er precies zou veranderen. Geef in de rationale aan dat dit gebaseerd is op een opmerking (niet op een expliciete tekstwijziging).
 - "merge": Samenvoegen van twee of meer items (als feedback hier expliciet om vraagt)
-- "comment_only": Alleen opmerkingen, geen tekstwijziging nodig (wel documenteren)
+- "comment_only": ALLEEN gebruiken als de opmerking puur informatief is en zich niet laat vertalen naar een tekstwijziging (bijv. "goed zo", "eens", of vragen die geen tekstimpact hebben). Bij twijfel: maak een "edit" voorstel zodat het team kan stemmen.
 
 Retourneer JSON in dit formaat:
 {

@@ -1006,6 +1006,7 @@ export default function FeedbackPage() {
             onEditChange={handleEditChange}
             onRefineChange={handleRefineChange}
             onDeleteChange={isFacilitator ? handleDeleteChange : undefined}
+            suggestions={suggestions}
           />
         )}
 
