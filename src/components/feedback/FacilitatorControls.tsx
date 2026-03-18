@@ -372,31 +372,51 @@ export function FacilitatorControls({
                 }
               </p>
 
-              {/* Preview of changes that will be applied */}
-              <div className="max-h-64 overflow-y-auto space-y-2">
-                {changes.filter(change => {
+              {/* Preview of ALL changes — approved shown with diff, rejected shown as skipped */}
+              <div className="max-h-72 overflow-y-auto space-y-2">
+                {changes.map(change => {
                   const cm = changeMajority.find(c => c.change_id === change.change_id);
-                  return cm?.hasMajority;
-                }).map(change => {
+                  const isApprovedChange = cm?.hasMajority;
                   const nameChanged = change.original_name !== change.proposed_name;
                   const descChanged = change.original_description !== change.proposed_description;
-                  if (!nameChanged && !descChanged) return null;
+                  const hasTextChange = nameChanged || descChanged;
+
+                  // Skip comment_only without text changes entirely — they have no effect
+                  if (!hasTextChange && change.change_type === "comment_only" && !isApprovedChange) return null;
+
                   return (
-                    <div key={change.change_id} className="p-2.5 bg-white rounded-lg border border-gray-200 text-sm space-y-1.5">
-                      <p className="font-medium text-gray-800 text-xs">{change.summary}</p>
-                      {nameChanged && (
-                        <div className="space-y-0.5">
-                          <p className="text-xs text-gray-400 uppercase">Naam</p>
-                          <div className="px-2 py-1 bg-red-50 rounded border-l-2 border-red-300 line-through text-red-700 text-xs">{change.original_name}</div>
-                          <div className="px-2 py-1 bg-green-50 rounded border-l-2 border-green-300 text-green-700 text-xs font-medium">{change.proposed_name}</div>
-                        </div>
-                      )}
-                      {descChanged && (
-                        <div className="space-y-0.5">
-                          <p className="text-xs text-gray-400 uppercase">Beschrijving</p>
-                          <div className="px-2 py-1 bg-red-50 rounded border-l-2 border-red-300 text-red-700 text-xs">{change.original_description}</div>
-                          <div className="px-2 py-1 bg-green-50 rounded border-l-2 border-green-300 text-green-700 text-xs">{change.proposed_description}</div>
-                        </div>
+                    <div key={change.change_id} className={`p-2.5 rounded-lg border text-sm space-y-1.5 ${
+                      isApprovedChange && hasTextChange
+                        ? "bg-white border-green-200"
+                        : "bg-gray-50 border-gray-200 opacity-60"
+                    }`}>
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="font-medium text-gray-800 text-xs truncate">{change.original_name}</p>
+                        {isApprovedChange && hasTextChange ? (
+                          <span className="flex-shrink-0 px-1.5 py-0.5 text-xs rounded-full bg-green-100 text-green-700 font-medium">Wordt doorgevoerd</span>
+                        ) : !isApprovedChange && hasTextChange ? (
+                          <span className="flex-shrink-0 px-1.5 py-0.5 text-xs rounded-full bg-red-100 text-red-700 font-medium">Overgeslagen</span>
+                        ) : (
+                          <span className="flex-shrink-0 px-1.5 py-0.5 text-xs rounded-full bg-gray-100 text-gray-500 font-medium">Geen tekstwijziging</span>
+                        )}
+                      </div>
+                      {isApprovedChange && hasTextChange && (
+                        <>
+                          {nameChanged && (
+                            <div className="space-y-0.5">
+                              <p className="text-xs text-gray-400 uppercase">Naam</p>
+                              <div className="px-2 py-1 bg-red-50 rounded border-l-2 border-red-300 line-through text-red-700 text-xs">{change.original_name}</div>
+                              <div className="px-2 py-1 bg-green-50 rounded border-l-2 border-green-300 text-green-700 text-xs font-medium">{change.proposed_name}</div>
+                            </div>
+                          )}
+                          {descChanged && (
+                            <div className="space-y-0.5">
+                              <p className="text-xs text-gray-400 uppercase">Beschrijving</p>
+                              <div className="px-2 py-1 bg-red-50 rounded border-l-2 border-red-300 text-red-700 text-xs">{change.original_description}</div>
+                              <div className="px-2 py-1 bg-green-50 rounded border-l-2 border-green-300 text-green-700 text-xs">{change.proposed_description}</div>
+                            </div>
+                          )}
+                        </>
                       )}
                     </div>
                   );
