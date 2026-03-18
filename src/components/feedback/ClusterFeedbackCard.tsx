@@ -527,18 +527,44 @@ function SuggestionContent({ type, content, clusterName, clusterDescription }: {
         </div>
       );
 
-    case "text_edit":
+    case "text_edit": {
+      const nameChanged = content.suggested_name !== content.original_name;
+      const descChanged = content.suggested_description !== content.original_description;
       return (
-        <div className="text-sm space-y-1">
-          {content.suggested_name !== content.original_name && (
-            <p><span className="text-gray-500">Naam:</span> <span className="font-medium">{content.suggested_name as string}</span></p>
+        <div className="text-sm space-y-2">
+          {nameChanged && (
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-gray-500 uppercase">Naam</p>
+              <div className="flex flex-col gap-1">
+                <div className="text-sm px-3 py-1.5 bg-red-50 rounded border-l-2 border-red-300 line-through text-red-700">
+                  {content.original_name as string}
+                </div>
+                <div className="text-sm px-3 py-1.5 bg-green-50 rounded border-l-2 border-green-300 text-green-700 font-medium">
+                  {content.suggested_name as string}
+                </div>
+              </div>
+            </div>
           )}
-          {content.suggested_description !== content.original_description && (
-            <p className="text-gray-700 italic">&ldquo;{(content.suggested_description as string).substring(0, 150)}...&rdquo;</p>
+          {descChanged && (
+            <div className="space-y-1">
+              <p className="text-xs font-medium text-gray-500 uppercase">Beschrijving</p>
+              <div className="flex flex-col gap-1">
+                <div className="text-sm px-3 py-1.5 bg-red-50 rounded border-l-2 border-red-300 text-red-700">
+                  {content.original_description as string}
+                </div>
+                <div className="text-sm px-3 py-1.5 bg-green-50 rounded border-l-2 border-green-300 text-green-700">
+                  {content.suggested_description as string}
+                </div>
+              </div>
+            </div>
           )}
-          <p className="text-gray-500">Reden: {content.reason as string}</p>
+          {!nameChanged && !descChanged && (
+            <p className="text-gray-500 italic">Geen tekstwijziging</p>
+          )}
+          <p className="text-gray-500 text-xs">Reden: {content.reason as string}</p>
         </div>
       );
+    }
 
     case "merge":
       return (

@@ -364,13 +364,45 @@ export function FacilitatorControls({
               }
             </button>
           ) : (
-            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
-              <p className="text-sm font-medium text-amber-800 mb-2">
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg space-y-3">
+              <p className="text-sm font-medium text-amber-800">
                 {rejectedCount > 0
                   ? `${approvedCount} wijziging(en) met meerderheid worden doorgevoerd. ${rejectedCount} wijziging(en) zonder meerderheid worden overgeslagen.`
                   : "Alle wijzigingen worden doorgevoerd. De doelen worden bijgewerkt."
                 }
               </p>
+
+              {/* Preview of changes that will be applied */}
+              <div className="max-h-64 overflow-y-auto space-y-2">
+                {changes.filter(change => {
+                  const cm = changeMajority.find(c => c.change_id === change.change_id);
+                  return cm?.hasMajority;
+                }).map(change => {
+                  const nameChanged = change.original_name !== change.proposed_name;
+                  const descChanged = change.original_description !== change.proposed_description;
+                  if (!nameChanged && !descChanged) return null;
+                  return (
+                    <div key={change.change_id} className="p-2.5 bg-white rounded-lg border border-gray-200 text-sm space-y-1.5">
+                      <p className="font-medium text-gray-800 text-xs">{change.summary}</p>
+                      {nameChanged && (
+                        <div className="space-y-0.5">
+                          <p className="text-xs text-gray-400 uppercase">Naam</p>
+                          <div className="px-2 py-1 bg-red-50 rounded border-l-2 border-red-300 line-through text-red-700 text-xs">{change.original_name}</div>
+                          <div className="px-2 py-1 bg-green-50 rounded border-l-2 border-green-300 text-green-700 text-xs font-medium">{change.proposed_name}</div>
+                        </div>
+                      )}
+                      {descChanged && (
+                        <div className="space-y-0.5">
+                          <p className="text-xs text-gray-400 uppercase">Beschrijving</p>
+                          <div className="px-2 py-1 bg-red-50 rounded border-l-2 border-red-300 text-red-700 text-xs">{change.original_description}</div>
+                          <div className="px-2 py-1 bg-green-50 rounded border-l-2 border-green-300 text-green-700 text-xs">{change.proposed_description}</div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+
               <div className="flex gap-2">
                 <button
                   onClick={() => { onApplyChanges(); setConfirmApply(false); }}
