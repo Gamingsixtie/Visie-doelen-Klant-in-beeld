@@ -928,6 +928,8 @@ export default function FeedbackPage() {
                     onAddSuggestion={handleAddSuggestion}
                     onVoteSuggestion={handleVoteSuggestion}
                     onDeleteSuggestion={handleDeleteSuggestion}
+                    onEditSuggestion={isFacilitator ? handleEditSuggestion : undefined}
+                    isFacilitator={isFacilitator}
                     phase={phase}
                   />
                 ))}

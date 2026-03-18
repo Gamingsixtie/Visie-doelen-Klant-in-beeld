@@ -19,6 +19,8 @@ interface ClusterFeedbackCardProps {
   onAddSuggestion: (clusterId: string, type: SuggestionType, content: Record<string, unknown>) => void;
   onVoteSuggestion: (suggestionId: string, value: "accept" | "reject") => void;
   onDeleteSuggestion: (suggestionId: string) => void;
+  onEditSuggestion?: (suggestionId: string, content: Record<string, unknown>) => void;
+  isFacilitator?: boolean;
   isRoundClosed?: boolean;
   phase?: FeedbackPhase;
 }
@@ -32,6 +34,8 @@ export function ClusterFeedbackCard({
   onAddSuggestion,
   onVoteSuggestion,
   onDeleteSuggestion,
+  onEditSuggestion,
+  isFacilitator = false,
   isRoundClosed,
   phase
 }: ClusterFeedbackCardProps) {
@@ -47,7 +51,26 @@ export function ClusterFeedbackCard({
   const [mergeTargetId, setMergeTargetId] = useState("");
   const [mergeReason, setMergeReason] = useState("");
 
+  const [editingSuggestionId, setEditingSuggestionId] = useState<string | null>(null);
+  const [editSuggestionContent, setEditSuggestionContent] = useState<Record<string, unknown>>({});
+
   const clusterSuggestions = suggestions.filter(s => s.cluster_id === cluster.id);
+
+  const startEditSuggestion = (suggestion: FeedbackSuggestion) => {
+    setEditingSuggestionId(suggestion.id);
+    setEditSuggestionContent({ ...(suggestion.content as Record<string, unknown>) });
+  };
+
+  const cancelEditSuggestion = () => {
+    setEditingSuggestionId(null);
+    setEditSuggestionContent({});
+  };
+
+  const saveEditSuggestion = (suggestionId: string) => {
+    if (onEditSuggestion) onEditSuggestion(suggestionId, editSuggestionContent);
+    setEditingSuggestionId(null);
+    setEditSuggestionContent({});
+  };
 
   const handleAddComment = () => {
     if (!commentText.trim()) return;
@@ -128,6 +151,8 @@ export function ClusterFeedbackCard({
               const isOwn = suggestion.member_name === currentMember;
               const content = suggestion.content as Record<string, unknown>;
 
+              const isEditingThis = editingSuggestionId === suggestion.id;
+
               return (
                 <div
                   key={suggestion.id}
@@ -139,19 +164,47 @@ export function ClusterFeedbackCard({
                         <span className="font-medium text-sm text-gray-800">{suggestion.member_name}</span>
                         <SuggestionTypeBadge type={suggestion.suggestion_type as SuggestionType} />
                       </div>
-                      <SuggestionContent type={suggestion.suggestion_type as SuggestionType} content={content} />
+                      {isEditingThis ? (
+                        <InlineSuggestionEdit
+                          type={suggestion.suggestion_type as SuggestionType}
+                          content={editSuggestionContent}
+                          onChange={setEditSuggestionContent}
+                          onSave={() => saveEditSuggestion(suggestion.id)}
+                          onCancel={cancelEditSuggestion}
+                        />
+                      ) : (
+                        <SuggestionContent type={suggestion.suggestion_type as SuggestionType} content={content} />
+                      )}
                     </div>
 
-                    {isOwn && isCollecting && (
-                      <button
-                        onClick={() => onDeleteSuggestion(suggestion.id)}
-                        className="text-gray-400 hover:text-red-500 transition-colors p-1"
-                        title="Verwijderen"
-                      >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      </button>
+                    {/* Action buttons */}
+                    {isCollecting && !isEditingThis && (
+                      <div className="flex items-center gap-1">
+                        {/* Facilitator edit button (pencil) */}
+                        {isFacilitator && onEditSuggestion && (
+                          <button
+                            onClick={() => startEditSuggestion(suggestion)}
+                            className="text-gray-400 hover:text-cito-blue transition-colors p-1"
+                            title="Bewerken"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                            </svg>
+                          </button>
+                        )}
+                        {/* Delete button (own or facilitator) */}
+                        {(isOwn || isFacilitator) && (
+                          <button
+                            onClick={() => onDeleteSuggestion(suggestion.id)}
+                            className="text-gray-400 hover:text-red-500 transition-colors p-1"
+                            title="Verwijderen"
+                          >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                            </svg>
+                          </button>
+                        )}
+                      </div>
                     )}
                   </div>
 
@@ -376,6 +429,78 @@ function SuggestionTypeBadge({ type }: { type: SuggestionType }) {
     <span className={`px-2 py-0.5 text-xs rounded-full ${c.className}`}>
       {c.label}
     </span>
+  );
+}
+
+function InlineSuggestionEdit({ type, content, onChange, onSave, onCancel }: {
+  type: SuggestionType;
+  content: Record<string, unknown>;
+  onChange: (content: Record<string, unknown>) => void;
+  onSave: () => void;
+  onCancel: () => void;
+}) {
+  const updateField = (field: string, value: string) => onChange({ ...content, [field]: value });
+
+  return (
+    <div className="space-y-2">
+      {type === "comment" && (
+        <textarea
+          value={(content.text as string) || ""}
+          onChange={(e) => updateField("text", e.target.value)}
+          className="w-full px-3 py-2 border border-cito-blue/30 rounded-lg text-sm focus:ring-2 focus:ring-cito-blue focus:outline-none bg-white"
+          rows={2}
+          autoFocus
+        />
+      )}
+      {type === "text_edit" && (
+        <>
+          <div>
+            <label className="text-xs text-gray-500 font-medium">Voorgestelde naam</label>
+            <input
+              type="text"
+              value={(content.suggested_name as string) || ""}
+              onChange={(e) => updateField("suggested_name", e.target.value)}
+              className="w-full px-3 py-2 border border-cito-blue/30 rounded-lg text-sm focus:ring-2 focus:ring-cito-blue focus:outline-none bg-white"
+              autoFocus
+            />
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 font-medium">Voorgestelde beschrijving</label>
+            <textarea
+              value={(content.suggested_description as string) || ""}
+              onChange={(e) => updateField("suggested_description", e.target.value)}
+              className="w-full px-3 py-2 border border-cito-blue/30 rounded-lg text-sm focus:ring-2 focus:ring-cito-blue focus:outline-none bg-white"
+              rows={3}
+            />
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 font-medium">Reden</label>
+            <input
+              type="text"
+              value={(content.reason as string) || ""}
+              onChange={(e) => updateField("reason", e.target.value)}
+              className="w-full px-3 py-2 border border-cito-blue/30 rounded-lg text-sm focus:ring-2 focus:ring-cito-blue focus:outline-none bg-white"
+            />
+          </div>
+        </>
+      )}
+      {type === "merge" && (
+        <div>
+          <label className="text-xs text-gray-500 font-medium">Reden</label>
+          <input
+            type="text"
+            value={(content.reason as string) || ""}
+            onChange={(e) => updateField("reason", e.target.value)}
+            className="w-full px-3 py-2 border border-cito-blue/30 rounded-lg text-sm focus:ring-2 focus:ring-cito-blue focus:outline-none bg-white"
+            autoFocus
+          />
+        </div>
+      )}
+      <div className="flex gap-2">
+        <button onClick={onSave} className="px-3 py-1.5 text-xs bg-cito-blue text-white rounded-lg hover:bg-blue-800">Opslaan</button>
+        <button onClick={onCancel} className="px-3 py-1.5 text-xs bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300">Annuleren</button>
+      </div>
+    </div>
   );
 }
 
