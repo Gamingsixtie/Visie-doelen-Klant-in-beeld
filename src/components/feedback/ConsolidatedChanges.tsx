@@ -464,9 +464,12 @@ function ChangeCard({
     }`}>
       {/* Header */}
       <div className="px-5 py-3 bg-gray-50 border-b flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <ChangeTypeBadge type={change.change_type} />
-          <h3 className="font-semibold text-gray-900">{change.summary}</h3>
+        <div className="flex-1 min-w-0">
+          <div className="flex items-center gap-2">
+            <ChangeTypeBadge type={change.change_type} />
+            <p className="text-xs text-gray-500 font-medium truncate">{change.original_name}</p>
+          </div>
+          <h3 className="font-semibold text-gray-900 mt-0.5">{change.summary}</h3>
         </div>
         <div className="flex items-center gap-2">
           {/* Facilitator edit buttons */}
