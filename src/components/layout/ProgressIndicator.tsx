@@ -84,7 +84,7 @@ export function ProgressIndicator({ currentStep, onStepClick }: ProgressIndicato
               : getStepStatus(mainStep.key as FlowStep);
             const isActive = isVisie ? isVisieActive : activeStep === mainStep.key;
             const canClick =
-              status !== "locked" && onStepClick && !isVisie;
+              status !== "locked" && onStepClick && (!isVisie || status === "completed");
 
             return (
               <div key={mainStep.key} className="flex items-center">
@@ -100,7 +100,15 @@ export function ProgressIndicator({ currentStep, onStepClick }: ProgressIndicato
 
                 <div className="flex flex-col items-center">
                   <button
-                    onClick={() => canClick && onStepClick(mainStep.key as FlowStep)}
+                    onClick={() => {
+                      if (!canClick || !onStepClick) return;
+                      // For visie group: navigate to first visie substep
+                      if (isVisie) {
+                        onStepClick("visie_huidige");
+                      } else {
+                        onStepClick(mainStep.key as FlowStep);
+                      }
+                    }}
                     disabled={!canClick}
                     className={`flex flex-col items-center ${
                       canClick ? "cursor-pointer" : "cursor-default"
@@ -125,8 +133,8 @@ export function ProgressIndicator({ currentStep, onStepClick }: ProgressIndicato
           })}
         </div>
 
-        {/* Visie substeps (only show when in visie) */}
-        {isVisieActive && (
+        {/* Visie substeps (show when in visie or when visie is completed for back-navigation) */}
+        {(isVisieActive || getVisieStatus() === "completed") && (
           <div className="mt-4 ml-0 md:ml-[calc(20%+8px)] flex flex-wrap items-center gap-2 md:gap-4">
             {["visie_huidige", "visie_gewenste", "visie_beweging", "visie_stakeholders", "visie_samenvatting"].map(
               (subStep, index) => {
