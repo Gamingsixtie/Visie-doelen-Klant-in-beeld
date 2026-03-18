@@ -428,16 +428,17 @@ export function FeedbackOverview({
 
                             {/* Action buttons */}
                             {isFacilitator && phase === "collecting" && !isEditing && (
-                              <div className="flex items-center gap-1 flex-shrink-0">
+                              <div className="flex items-center gap-1.5 flex-shrink-0">
                                 {onEditSuggestion && (
                                   <button
                                     onClick={() => startEdit(suggestion)}
-                                    className="p-1.5 rounded text-gray-400 hover:text-cito-blue hover:bg-blue-50 transition-colors"
-                                    title="Suggestie bewerken"
+                                    className="flex items-center gap-1 px-2 py-1 rounded-md text-xs font-medium text-cito-blue bg-blue-50 hover:bg-blue-100 border border-blue-200 transition-colors"
+                                    title="Tekst aanpassen"
                                   >
-                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                                     </svg>
+                                    Aanpassen
                                   </button>
                                 )}
                                 {onDeleteSuggestion && (
@@ -587,15 +588,24 @@ function SuggestionEditForm({ type, content, onChange, onSave, onCancel }: {
   return (
     <div className="space-y-2">
       {type === "comment" && (
-        <textarea value={(content.text as string) || ""} onChange={(e) => updateField("text", e.target.value)}
-          className="w-full px-3 py-2 border border-cito-blue/30 rounded-lg text-sm focus:ring-2 focus:ring-cito-blue focus:outline-none bg-white" rows={2} autoFocus />
+        <div>
+          <label className="text-xs text-gray-500 font-medium">Opmerking aanpassen</label>
+          <textarea value={(content.text as string) || ""} onChange={(e) => updateField("text", e.target.value)}
+            className="w-full px-3 py-2 border border-cito-blue/30 rounded-lg text-sm focus:ring-2 focus:ring-cito-blue focus:outline-none bg-white" rows={3} autoFocus />
+          <p className="text-xs text-gray-400 mt-0.5 italic">Je kunt de tekst herschrijven om zinnen beter lopend te maken.</p>
+        </div>
       )}
       {type === "text_edit" && (
         <>
           <div>
+            <label className="text-xs text-gray-500 font-medium">Voorgestelde naam</label>
+            <input type="text" value={(content.suggested_name as string) || ""} onChange={(e) => updateField("suggested_name", e.target.value)}
+              className="w-full px-3 py-2 border border-cito-blue/30 rounded-lg text-sm focus:ring-2 focus:ring-cito-blue focus:outline-none bg-white" autoFocus />
+          </div>
+          <div>
             <label className="text-xs text-gray-500 font-medium">Voorgestelde beschrijving</label>
             <textarea value={(content.suggested_description as string) || ""} onChange={(e) => updateField("suggested_description", e.target.value)}
-              className="w-full px-3 py-2 border border-cito-blue/30 rounded-lg text-sm focus:ring-2 focus:ring-cito-blue focus:outline-none bg-white" rows={3} autoFocus />
+              className="w-full px-3 py-2 border border-cito-blue/30 rounded-lg text-sm focus:ring-2 focus:ring-cito-blue focus:outline-none bg-white" rows={3} />
           </div>
           <div>
             <label className="text-xs text-gray-500 font-medium">Reden</label>
@@ -606,7 +616,7 @@ function SuggestionEditForm({ type, content, onChange, onSave, onCancel }: {
       )}
       {type === "merge" && (
         <div>
-          <label className="text-xs text-gray-500 font-medium">Reden</label>
+          <label className="text-xs text-gray-500 font-medium">Reden voor samenvoegen</label>
           <input type="text" value={(content.reason as string) || ""} onChange={(e) => updateField("reason", e.target.value)}
             className="w-full px-3 py-2 border border-cito-blue/30 rounded-lg text-sm focus:ring-2 focus:ring-cito-blue focus:outline-none bg-white" autoFocus />
         </div>
