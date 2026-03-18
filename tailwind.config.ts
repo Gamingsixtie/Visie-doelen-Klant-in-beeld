@@ -33,6 +33,9 @@ const config: Config = {
         "slide-in": "slide-in 0.5s ease-out",
         "roll-up": "roll-up 4s linear",
         "pulse-slow": "pulse 3s ease-in-out infinite",
+        "shimmer": "shimmer 2s linear infinite",
+        "float": "float 6s ease-in-out infinite",
+        "sparkle": "sparkle 1.5s ease-in-out infinite",
       },
       keyframes: {
         "title-glow": {
@@ -46,6 +49,18 @@ const config: Config = {
         "roll-up": {
           "0%": { transform: "translateY(100%)" },
           "100%": { transform: "translateY(-100%)" },
+        },
+        "shimmer": {
+          "0%": { backgroundPosition: "-200% 0" },
+          "100%": { backgroundPosition: "200% 0" },
+        },
+        "float": {
+          "0%, 100%": { transform: "translateY(0) rotate(0deg)" },
+          "50%": { transform: "translateY(-20px) rotate(5deg)" },
+        },
+        "sparkle": {
+          "0%, 100%": { opacity: "0", transform: "scale(0)" },
+          "50%": { opacity: "1", transform: "scale(1)" },
         },
       },
     },

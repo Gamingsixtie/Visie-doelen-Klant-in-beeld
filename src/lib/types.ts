@@ -25,7 +25,8 @@ export const MT_MEMBERS = [
   "Bert Thijs",
   "Leontine",
   "Jasper",
-  "Cornelis"
+  "Cornelis",
+  "Meryl"
 ] as const;
 
 // Facilitator is een aparte rol - niet een MT-lid
