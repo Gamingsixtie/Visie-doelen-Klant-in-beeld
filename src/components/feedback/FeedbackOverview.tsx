@@ -400,6 +400,8 @@ export function FeedbackOverview({
                                 <SuggestionContentDisplay
                                   type={suggestion.suggestion_type as SuggestionType}
                                   content={content}
+                                  clusterName={cluster.name}
+                                  clusterDescription={cluster.description}
                                 />
                               )}
 
@@ -536,10 +538,22 @@ export function FeedbackOverview({
 }
 
 // Read-only suggestion content
-function SuggestionContentDisplay({ type, content }: { type: SuggestionType; content: Record<string, unknown> }) {
+function SuggestionContentDisplay({ type, content, clusterName, clusterDescription }: { type: SuggestionType; content: Record<string, unknown>; clusterName?: string; clusterDescription?: string }) {
   switch (type) {
     case "comment":
-      return <p className="text-sm text-gray-700">{content.text as string}</p>;
+      return (
+        <div className="space-y-1.5">
+          {clusterName && (
+            <div className="text-xs px-2.5 py-1.5 bg-gray-100 border border-gray-200 rounded-lg text-gray-500">
+              <span className="font-medium text-gray-700">{clusterName}</span>
+              {clusterDescription && (
+                <span className="text-gray-400"> — {clusterDescription.length > 120 ? clusterDescription.substring(0, 120) + "..." : clusterDescription}</span>
+              )}
+            </div>
+          )}
+          <p className="text-sm text-gray-700">{content.text as string}</p>
+        </div>
+      );
     case "text_edit":
       return (
         <div className="text-sm space-y-1">

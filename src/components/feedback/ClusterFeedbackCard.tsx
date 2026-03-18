@@ -173,7 +173,12 @@ export function ClusterFeedbackCard({
                           onCancel={cancelEditSuggestion}
                         />
                       ) : (
-                        <SuggestionContent type={suggestion.suggestion_type as SuggestionType} content={content} />
+                        <SuggestionContent
+                          type={suggestion.suggestion_type as SuggestionType}
+                          content={content}
+                          clusterName={cluster.name}
+                          clusterDescription={cluster.description}
+                        />
                       )}
                     </div>
 
@@ -504,10 +509,22 @@ function InlineSuggestionEdit({ type, content, onChange, onSave, onCancel }: {
   );
 }
 
-function SuggestionContent({ type, content }: { type: SuggestionType; content: Record<string, unknown> }) {
+function SuggestionContent({ type, content, clusterName, clusterDescription }: { type: SuggestionType; content: Record<string, unknown>; clusterName?: string; clusterDescription?: string }) {
   switch (type) {
     case "comment":
-      return <p className="text-sm text-gray-700">{content.text as string}</p>;
+      return (
+        <div className="space-y-1.5">
+          {clusterName && (
+            <div className="text-xs px-2.5 py-1.5 bg-gray-100 border border-gray-200 rounded-lg text-gray-500">
+              <span className="font-medium text-gray-700">{clusterName}</span>
+              {clusterDescription && (
+                <span className="text-gray-400"> — {clusterDescription.length > 120 ? clusterDescription.substring(0, 120) + "..." : clusterDescription}</span>
+              )}
+            </div>
+          )}
+          <p className="text-sm text-gray-700">{content.text as string}</p>
+        </div>
+      );
 
     case "text_edit":
       return (
