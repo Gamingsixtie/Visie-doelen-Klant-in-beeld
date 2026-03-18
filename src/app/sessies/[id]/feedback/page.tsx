@@ -196,6 +196,14 @@ export default function FeedbackPage() {
     }
   };
 
+  // Handle edit suggestion content (facilitator only)
+  const handleEditSuggestion = async (suggestionId: string, content: Record<string, unknown>) => {
+    const updated = await feedbackService.updateSuggestionContent(suggestionId, content);
+    if (updated) {
+      setSuggestions(prev => prev.map(s => s.id === suggestionId ? { ...s, content: content as typeof s.content } : s));
+    }
+  };
+
   // Handle AI consolidation (facilitator only) - with optional type filter
   const handleConsolidate = async (selectedTypes?: feedbackService.SuggestionType[]) => {
     if (!round || !isFacilitator) return;
@@ -851,6 +859,8 @@ export default function FeedbackPage() {
                 onRestoreCluster={handleRestoreCluster}
                 activeTypeFilters={activeTypeFilters}
                 onToggleTypeFilter={handleToggleTypeFilter}
+                onEditSuggestion={isFacilitator ? handleEditSuggestion : undefined}
+                onDeleteSuggestion={isFacilitator ? handleDeleteSuggestion : undefined}
               />
             ) : (
               <div className="space-y-4">

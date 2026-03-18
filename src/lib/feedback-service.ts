@@ -249,6 +249,27 @@ export async function deleteSuggestion(suggestionId: string): Promise<boolean> {
   return true;
 }
 
+export async function updateSuggestionContent(
+  suggestionId: string,
+  content: Record<string, unknown>
+): Promise<FeedbackSuggestion | null> {
+  if (!isSupabaseConfigured() || !supabase) return null;
+
+  const { data, error } = await supabase
+    .from("feedback_suggestions")
+    .update({ content })
+    .eq("id", suggestionId)
+    .select()
+    .single();
+
+  if (error) {
+    console.error("Error updating suggestion:", error);
+    return null;
+  }
+
+  return data as FeedbackSuggestion;
+}
+
 // === Suggestion Votes ===
 
 export async function voteSuggestion(
