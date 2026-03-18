@@ -15,6 +15,7 @@ import type {
 } from "./types";
 import { getInitialFlowState, getInitialSyncState } from "./types";
 import * as persistence from "./persistence";
+import { supabase } from "./supabase";
 import { useSaveStatus } from "./save-status-context";
 
 // === CONTEXT TYPE ===
@@ -127,12 +128,49 @@ export function SessionProvider({ children }: SessionProviderProps) {
     const savedDocuments = persistence.getDocuments(sessionId);
     const savedApprovedTexts = persistence.getAllApprovedTexts(sessionId);
 
+    const localFlowState = savedFlowState || getInitialFlowState();
     setCurrentSession(session);
-    setFlowState(savedFlowState || getInitialFlowState());
+    setFlowState(localFlowState);
     setDocuments(savedDocuments);
     setApprovedTexts(savedApprovedTexts);
-    setSyncState(getInitialSyncState()); // Reset sync state for presenter
+    setSyncState(getInitialSyncState());
     setIsViewerMode(false);
+
+    // Also check Supabase for more up-to-date step statuses (e.g. unlocked via feedback or external update)
+    if (supabase) {
+      supabase
+        .from("sessions")
+        .select("flow_state")
+        .eq("id", sessionId)
+        .limit(1)
+        .then(({ data: rows }) => {
+          const row = rows?.[0];
+          if (!row?.flow_state) return;
+          const remoteFlowState = (row.flow_state as Record<string, unknown>).flowState as FlowState | undefined;
+          if (!remoteFlowState?.steps) return;
+
+          // Merge: use the most advanced status per step (completed > active > locked)
+          const statusPriority: Record<string, number> = { locked: 0, active: 1, completed: 2 };
+          let hasUpdates = false;
+          const mergedSteps = { ...localFlowState.steps };
+
+          for (const [step, remoteStatus] of Object.entries(remoteFlowState.steps)) {
+            const localStatus = localFlowState.steps[step as FlowStep];
+            if ((statusPriority[remoteStatus] || 0) > (statusPriority[localStatus] || 0)) {
+              mergedSteps[step as FlowStep] = remoteStatus as "locked" | "active" | "completed";
+              hasUpdates = true;
+            }
+          }
+
+          if (hasUpdates) {
+            console.log("[SessionContext] Supabase has newer step statuses, merging");
+            const mergedFlowState = { ...localFlowState, steps: mergedSteps };
+            setFlowState(mergedFlowState);
+            persistence.saveFlowState(sessionId, mergedFlowState);
+          }
+        })
+        .then(() => {}, () => {}); // Fail silently — localStorage data is still valid
+    }
   }, []);
 
   // Load session from server sync (for viewers)
