@@ -99,7 +99,7 @@ export function ConsolidatedChanges({
     };
   }, [classifiedChanges, activeTypes]);
 
-  // Apply filters and sort
+  // Apply filters and sort — text edits & merges always before comment_only
   const filteredAndSorted = useMemo(() => {
     let result = classifiedChanges.filter(c => activeTypes.has(c.change.change_type as ChangeTypeFilter));
 
@@ -122,6 +122,14 @@ export function ConsolidatedChanges({
         return 0;
       });
     }
+
+    // Always sort: edits & merges first, comment_only last
+    // This ensures text changes are reviewed before comments that may build on them
+    result = [...result].sort((a, b) => {
+      const aIsComment = a.change.change_type === "comment_only" ? 1 : 0;
+      const bIsComment = b.change.change_type === "comment_only" ? 1 : 0;
+      return aIsComment - bIsComment;
+    });
 
     return result;
   }, [classifiedChanges, activeTypes, voteStatusFilter, sortOrder]);
@@ -149,6 +157,7 @@ export function ConsolidatedChanges({
       onDeleteChange={onDeleteChange}
       onGenerateProposal={onGenerateProposal}
       suggestions={suggestions}
+      allChanges={changes}
     />
   );
 
@@ -367,7 +376,8 @@ function ChangeCard({
   onRefineChange,
   onDeleteChange,
   onGenerateProposal,
-  suggestions
+  suggestions,
+  allChanges
 }: {
   change: ProposedChange;
   votes: ChangeVote[];
@@ -380,6 +390,7 @@ function ChangeCard({
   onDeleteChange?: (changeId: string) => void;
   onGenerateProposal?: (changeId: string) => Promise<void>;
   suggestions?: FeedbackSuggestion[];
+  allChanges?: ProposedChange[];
 }) {
   const [showCommentFor, setShowCommentFor] = useState<"disagree" | "abstain" | null>(null);
   const [voteComment, setVoteComment] = useState("");
@@ -673,35 +684,53 @@ function ChangeCard({
             })()}
 
             {/* Generate text proposal button */}
-            {onGenerateProposal && (
-              <button
-                onClick={async () => {
-                  setIsGenerating(true);
-                  try {
-                    await onGenerateProposal(change.change_id);
-                  } finally {
-                    setIsGenerating(false);
-                  }
-                }}
-                disabled={isGenerating}
-                className="w-full px-4 py-3 bg-blue-50 border-2 border-dashed border-blue-300 rounded-lg text-sm font-medium text-blue-700 hover:bg-blue-100 hover:border-blue-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
-              >
-                {isGenerating ? (
-                  <>
-                    <div className="spinner w-4 h-4" />
-                    AI genereert tekstvoorstel...
-                  </>
-                ) : (
-                  <>
-                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                    </svg>
-                    Toon wat er verandert als we deze opmerking verwerken
-                  </>
-                )}
-              </button>
-            )}
+            {onGenerateProposal && (() => {
+              const hasEditOnSameCluster = allChanges?.some(
+                c => c.cluster_id === change.cluster_id
+                  && c.change_id !== change.change_id
+                  && (c.change_type === "edit" || c.change_type === "merge")
+                  && (c.proposed_name !== c.original_name || c.proposed_description !== c.original_description)
+              );
+              return (
+                <div className="space-y-2">
+                  {hasEditOnSameCluster && (
+                    <div className="flex items-start gap-2 text-xs text-blue-600 bg-blue-50 rounded-lg px-3 py-2 border border-blue-200">
+                      <svg className="w-4 h-4 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                      </svg>
+                      <span>Er staat ook een tekstwijziging op dit doel. Het tekstvoorstel wordt gegenereerd bovenop die wijziging, zodat beide worden meegenomen.</span>
+                    </div>
+                  )}
+                  <button
+                    onClick={async () => {
+                      setIsGenerating(true);
+                      try {
+                        await onGenerateProposal(change.change_id);
+                      } finally {
+                        setIsGenerating(false);
+                      }
+                    }}
+                    disabled={isGenerating}
+                    className="w-full px-4 py-3 bg-blue-50 border-2 border-dashed border-blue-300 rounded-lg text-sm font-medium text-blue-700 hover:bg-blue-100 hover:border-blue-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+                  >
+                    {isGenerating ? (
+                      <>
+                        <div className="spinner w-4 h-4" />
+                        AI genereert tekstvoorstel...
+                      </>
+                    ) : (
+                      <>
+                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                        </svg>
+                        Toon wat er verandert als we deze opmerking verwerken
+                      </>
+                    )}
+                  </button>
+                </div>
+              );
+            })()}
 
             {!onGenerateProposal && (
               <div className="flex items-center gap-2 text-xs text-gray-400 bg-gray-50 rounded-lg px-3 py-2 border border-dashed border-gray-200">

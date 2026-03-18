@@ -523,6 +523,26 @@ export default function FeedbackPage() {
     const change = consolidatedChanges.changes.find(c => c.change_id === changeId);
     if (!change) return;
 
+    // Check if there's an existing edit/merge on the same cluster — use its proposed text as baseline
+    const existingEdit = consolidatedChanges.changes.find(
+      c => c.cluster_id === change.cluster_id
+        && c.change_id !== changeId
+        && (c.change_type === "edit" || c.change_type === "merge")
+        && (c.proposed_name !== c.original_name || c.proposed_description !== c.original_description)
+    );
+
+    // Build the change object with the right baseline
+    const baseChange = existingEdit
+      ? {
+          ...change,
+          // Use the already-proposed text as the new "original" so the AI builds on top of it
+          original_name: existingEdit.proposed_name,
+          original_description: existingEdit.proposed_description,
+          proposed_name: existingEdit.proposed_name,
+          proposed_description: existingEdit.proposed_description,
+        }
+      : change;
+
     // Gather source comments for context
     const sourceComments = suggestions.filter(s =>
       change.source_suggestions.includes(s.id) ||
@@ -532,13 +552,17 @@ export default function FeedbackPage() {
       .map(s => `${s.member_name}: ${(s.content as Record<string, unknown>).text || ""}`)
       .join("\n");
 
-    const feedback = `Verwerk de volgende opmerkingen van MT-leden in de doeltekst. Laat de tekst inhoudelijk verrijken op basis van deze feedback, maar behoud de kernformulering. Geef een concreet tekstvoorstel.\n\nOpmerkingen:\n${commentTexts || change.rationale}`;
+    const baselineNote = existingEdit
+      ? `\n\nLET OP: Er is al een tekstwijziging op dit doel goedgekeurd. De tekst hieronder is de REEDS AANGEPASTE versie. Bouw hier op voort — neem de bestaande wijziging als uitgangspunt en verwerk de opmerkingen erin.`
+      : "";
+
+    const feedback = `Verwerk de volgende opmerkingen van MT-leden in de doeltekst. Laat de tekst inhoudelijk verrijken op basis van deze feedback, maar behoud de kernformulering. Geef een concreet tekstvoorstel.${baselineNote}\n\nOpmerkingen:\n${commentTexts || change.rationale}`;
 
     const response = await fetch("/api/refine-change", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        proposedChange: change,
+        proposedChange: baseChange,
         feedback
       })
     });
@@ -550,6 +574,7 @@ export default function FeedbackPage() {
     }
 
     // Update change from comment_only to edit with the generated proposal
+    // Use the ORIGINAL cluster text as original (for a clean diff), and AI output as proposed
     const updatedChanges: ConsolidatedChangesType = {
       ...consolidatedChanges,
       changes: consolidatedChanges.changes.map(c =>
@@ -557,6 +582,8 @@ export default function FeedbackPage() {
           ? {
               ...c,
               change_type: "edit" as const,
+              original_name: existingEdit ? existingEdit.proposed_name : c.original_name,
+              original_description: existingEdit ? existingEdit.proposed_description : c.original_description,
               proposed_name: data.refined.proposed_name,
               proposed_description: data.refined.proposed_description,
               summary: data.refined.summary
