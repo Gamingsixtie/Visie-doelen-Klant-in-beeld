@@ -1,8 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import type { ProposedChange, ChangeVote, ChangeVoteValue } from "@/lib/feedback-service";
 import { MT_MEMBERS } from "@/lib/types";
+
+type ChangeTypeFilter = "edit" | "merge" | "comment_only";
+type VoteStatusFilter = "all" | "unvoted" | "disagree" | "agree";
+type SortOrder = "default" | "disagree_first" | "unvoted_first";
 
 interface ConsolidatedChangesProps {
   changes: ProposedChange[];
@@ -18,6 +22,12 @@ interface ConsolidatedChangesProps {
   onDeleteChange?: (changeId: string) => void;
 }
 
+const TYPE_FILTER_CONFIG: { type: ChangeTypeFilter; label: string; icon: string; activeClass: string; inactiveClass: string }[] = [
+  { type: "edit", label: "Tekstwijziging", icon: "M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z", activeClass: "bg-blue-50 border-blue-200 text-blue-700 ring-2 ring-offset-1 ring-blue-400", inactiveClass: "bg-gray-50 border-gray-200 text-gray-400" },
+  { type: "merge", label: "Samenvoegen", icon: "M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z", activeClass: "bg-purple-50 border-purple-200 text-purple-700 ring-2 ring-offset-1 ring-purple-400", inactiveClass: "bg-gray-50 border-gray-200 text-gray-400" },
+  { type: "comment_only", label: "Alleen opmerkingen", icon: "M7 8h10M7 12h4m1 8l-4-4H5a2 2 0 01-2-2V6a2 2 0 012-2h14a2 2 0 012 2v8a2 2 0 01-2 2h-3l-4 4z", activeClass: "bg-gray-100 border-gray-300 text-gray-700 ring-2 ring-offset-1 ring-gray-400", inactiveClass: "bg-gray-50 border-gray-200 text-gray-400" },
+];
+
 export function ConsolidatedChanges({
   changes,
   unchangedClusterIds,
@@ -31,6 +41,111 @@ export function ConsolidatedChanges({
   onRefineChange,
   onDeleteChange
 }: ConsolidatedChangesProps) {
+  // Filter & sort state
+  const [activeTypes, setActiveTypes] = useState<Set<ChangeTypeFilter>>(new Set(["edit", "merge", "comment_only"]));
+  const [voteStatusFilter, setVoteStatusFilter] = useState<VoteStatusFilter>("all");
+  const [sortOrder, setSortOrder] = useState<SortOrder>("default");
+
+  const resetFilters = () => {
+    setActiveTypes(new Set(["edit", "merge", "comment_only"]));
+    setVoteStatusFilter("all");
+    setSortOrder("default");
+  };
+
+  const toggleType = (type: ChangeTypeFilter) => {
+    setActiveTypes(prev => {
+      const next = new Set(prev);
+      if (next.has(type)) next.delete(type);
+      else next.add(type);
+      return next;
+    });
+  };
+
+  // Classify each change
+  const classifiedChanges = useMemo(() => {
+    return changes.map(change => {
+      const votes = changeVotes.filter(v => v.change_id === change.change_id);
+      const myVote = votes.find(v => v.member_name === currentMember);
+      const agreeCount = votes.filter(v => v.value === "agree").length;
+      const disagreeCount = votes.filter(v => v.value === "disagree").length;
+      const hasDisagree = disagreeCount > 0;
+      const isUnvoted = !myVote;
+      const isAllAgree = agreeCount > 0 && disagreeCount === 0 && votes.length === agreeCount;
+      const needsAttention = isUnvoted || hasDisagree;
+
+      return { change, votes, myVote, agreeCount, disagreeCount, hasDisagree, isUnvoted, isAllAgree, needsAttention };
+    });
+  }, [changes, changeVotes, currentMember]);
+
+  // Type counts (unfiltered)
+  const typeCounts = useMemo(() => {
+    const counts: Record<string, number> = { edit: 0, merge: 0, comment_only: 0 };
+    for (const c of changes) counts[c.change_type] = (counts[c.change_type] || 0) + 1;
+    return counts;
+  }, [changes]);
+
+  // Vote status counts (after type filter)
+  const statusCounts = useMemo(() => {
+    const typeFiltered = classifiedChanges.filter(c => activeTypes.has(c.change.change_type as ChangeTypeFilter));
+    return {
+      all: typeFiltered.length,
+      unvoted: typeFiltered.filter(c => c.isUnvoted).length,
+      disagree: typeFiltered.filter(c => c.hasDisagree).length,
+      agree: typeFiltered.filter(c => c.isAllAgree).length,
+    };
+  }, [classifiedChanges, activeTypes]);
+
+  // Apply filters and sort
+  const filteredAndSorted = useMemo(() => {
+    let result = classifiedChanges.filter(c => activeTypes.has(c.change.change_type as ChangeTypeFilter));
+
+    if (voteStatusFilter === "unvoted") result = result.filter(c => c.isUnvoted);
+    else if (voteStatusFilter === "disagree") result = result.filter(c => c.hasDisagree);
+    else if (voteStatusFilter === "agree") result = result.filter(c => c.isAllAgree);
+
+    if (sortOrder === "disagree_first") {
+      result = [...result].sort((a, b) => {
+        if (a.hasDisagree && !b.hasDisagree) return -1;
+        if (!a.hasDisagree && b.hasDisagree) return 1;
+        if (a.isUnvoted && !b.isUnvoted) return -1;
+        if (!a.isUnvoted && b.isUnvoted) return 1;
+        return 0;
+      });
+    } else if (sortOrder === "unvoted_first") {
+      result = [...result].sort((a, b) => {
+        if (a.isUnvoted && !b.isUnvoted) return -1;
+        if (!a.isUnvoted && b.isUnvoted) return 1;
+        return 0;
+      });
+    }
+
+    return result;
+  }, [classifiedChanges, activeTypes, voteStatusFilter, sortOrder]);
+
+  // Group into attention / resolved
+  const attentionChanges = filteredAndSorted.filter(c => c.needsAttention);
+  const resolvedChanges = filteredAndSorted.filter(c => !c.needsAttention);
+  const showGroups = attentionChanges.length > 0 && resolvedChanges.length > 0;
+
+  const isFiltered = activeTypes.size < 3 || voteStatusFilter !== "all" || sortOrder !== "default";
+  const disagreeTotal = classifiedChanges.filter(c => c.hasDisagree).length;
+  const unvotedTotal = classifiedChanges.filter(c => c.isUnvoted).length;
+
+  const renderChangeCard = (item: typeof classifiedChanges[0]) => (
+    <ChangeCard
+      key={item.change.change_id}
+      change={item.change}
+      votes={item.votes}
+      currentMember={currentMember}
+      onVote={onVote}
+      isVotingPhase={isVotingPhase}
+      isFacilitator={isFacilitator}
+      onEditChange={onEditChange}
+      onRefineChange={onRefineChange}
+      onDeleteChange={onDeleteChange}
+    />
+  );
+
   return (
     <div className="space-y-6">
       {/* Summary banner */}
@@ -49,7 +164,12 @@ export function ConsolidatedChanges({
       {/* Stats */}
       <div className="grid grid-cols-3 gap-4">
         <div className="card p-3 text-center">
-          <div className="text-xl font-bold text-cito-blue">{changes.length}</div>
+          <div className="text-xl font-bold text-cito-blue">
+            {filteredAndSorted.length}
+            {isFiltered && filteredAndSorted.length !== changes.length && (
+              <span className="text-sm font-normal text-gray-400">/{changes.length}</span>
+            )}
+          </div>
           <div className="text-xs text-gray-500">Wijzigingsvoorstellen</div>
         </div>
         <div className="card p-3 text-center">
@@ -64,21 +184,153 @@ export function ConsolidatedChanges({
         </div>
       </div>
 
-      {/* Change cards */}
-      {changes.map((change) => (
-        <ChangeCard
-          key={change.change_id}
-          change={change}
-          votes={changeVotes.filter(v => v.change_id === change.change_id)}
-          currentMember={currentMember}
-          onVote={onVote}
-          isVotingPhase={isVotingPhase}
-          isFacilitator={isFacilitator}
-          onEditChange={onEditChange}
-          onRefineChange={onRefineChange}
-          onDeleteChange={onDeleteChange}
-        />
-      ))}
+      {/* Filter bar */}
+      <div className="card p-4 space-y-3">
+        {/* Type filters */}
+        <div>
+          <div className="text-xs font-medium text-gray-500 uppercase mb-2">Filter op type</div>
+          <div className="flex flex-wrap gap-2">
+            {TYPE_FILTER_CONFIG.map(({ type, label, icon, activeClass, inactiveClass }) => {
+              const isActive = activeTypes.has(type);
+              const count = typeCounts[type] || 0;
+              return (
+                <button
+                  key={type}
+                  onClick={() => toggleType(type)}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium transition-all ${
+                    isActive ? activeClass : inactiveClass
+                  }`}
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={icon} />
+                  </svg>
+                  {label}
+                  <span className={`px-1.5 py-0.5 text-xs rounded-full ${isActive ? "bg-white/60" : "bg-gray-100"}`}>{count}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Vote status + Sort */}
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          {/* Vote status filter */}
+          <div>
+            <div className="text-xs font-medium text-gray-500 uppercase mb-2">Stemstatus</div>
+            <div className="inline-flex rounded-lg border border-gray-200 overflow-hidden">
+              {([
+                { value: "all" as VoteStatusFilter, label: "Alles" },
+                { value: "unvoted" as VoteStatusFilter, label: "Ongestemd" },
+                { value: "disagree" as VoteStatusFilter, label: "Bezwaar" },
+                { value: "agree" as VoteStatusFilter, label: "Akkoord" },
+              ]).map(({ value, label }) => {
+                const isActive = voteStatusFilter === value;
+                const count = statusCounts[value];
+                return (
+                  <button
+                    key={value}
+                    onClick={() => setVoteStatusFilter(value)}
+                    className={`px-3 py-1.5 text-xs font-medium transition-colors border-r last:border-r-0 border-gray-200 ${
+                      isActive
+                        ? "bg-cito-blue text-white"
+                        : "bg-white text-gray-600 hover:bg-gray-50"
+                    }`}
+                  >
+                    {label}
+                    {value !== "all" && count > 0 && (
+                      <span className={`ml-1 px-1 py-0.5 text-xs rounded-full ${isActive ? "bg-white/30" : "bg-gray-100"}`}>{count}</span>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Sort */}
+          <div>
+            <div className="text-xs font-medium text-gray-500 uppercase mb-2">Sorteren</div>
+            <div className="flex gap-1">
+              {([
+                { value: "default" as SortOrder, label: "Standaard" },
+                { value: "disagree_first" as SortOrder, label: "Bezwaren eerst" },
+                { value: "unvoted_first" as SortOrder, label: "Ongestemd eerst" },
+              ]).map(({ value, label }) => {
+                const isActive = sortOrder === value;
+                return (
+                  <button
+                    key={value}
+                    onClick={() => setSortOrder(value)}
+                    className={`px-2 py-1 text-xs rounded-lg border transition-colors ${
+                      isActive
+                        ? "bg-cito-blue/10 text-cito-blue border-cito-blue/30 font-medium"
+                        : "bg-white text-gray-500 border-gray-200 hover:bg-gray-50"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Attention banner */}
+      {(disagreeTotal > 0 || unvotedTotal > 0) && voteStatusFilter === "all" && (
+        <div className="p-3 rounded-lg bg-amber-50 border border-amber-200 flex items-center gap-3">
+          <svg className="w-5 h-5 text-amber-600 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+          </svg>
+          <div className="text-sm">
+            <span className="font-medium text-amber-800">
+              {disagreeTotal > 0 && `${disagreeTotal} voorstel${disagreeTotal !== 1 ? "len" : ""} met bezwaar`}
+              {disagreeTotal > 0 && unvotedTotal > 0 && " · "}
+              {unvotedTotal > 0 && `${unvotedTotal} nog niet bestemd`}
+            </span>
+            <span className="text-amber-600 ml-1">van {changes.length} totaal</span>
+          </div>
+        </div>
+      )}
+
+      {/* Empty state */}
+      {filteredAndSorted.length === 0 && changes.length > 0 && (
+        <div className="p-8 text-center text-gray-400">
+          <svg className="w-8 h-8 mx-auto mb-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+          </svg>
+          <p className="text-sm mb-1">Geen voorstellen gevonden met de huidige filters.</p>
+          <button onClick={resetFilters} className="text-xs text-cito-blue hover:underline">
+            Filters wissen
+          </button>
+        </div>
+      )}
+
+      {/* Change cards with grouping */}
+      {showGroups ? (
+        <>
+          {/* Needs attention group */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 pt-1">
+              <div className="w-2 h-2 rounded-full bg-amber-500" />
+              <h3 className="text-sm font-semibold text-amber-800">Actie vereist ({attentionChanges.length})</h3>
+              <div className="flex-1 h-px bg-amber-200" />
+            </div>
+            {attentionChanges.map(renderChangeCard)}
+          </div>
+
+          {/* Resolved group */}
+          <div className="space-y-4">
+            <div className="flex items-center gap-2 pt-1">
+              <div className="w-2 h-2 rounded-full bg-green-500" />
+              <h3 className="text-sm font-semibold text-green-800">Afgerond ({resolvedChanges.length})</h3>
+              <div className="flex-1 h-px bg-green-200" />
+            </div>
+            {resolvedChanges.map(renderChangeCard)}
+          </div>
+        </>
+      ) : (
+        filteredAndSorted.map(renderChangeCard)
+      )}
 
       {/* Unchanged clusters note */}
       {unchangedClusterIds.length > 0 && (
