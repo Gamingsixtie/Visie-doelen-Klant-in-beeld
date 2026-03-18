@@ -208,8 +208,8 @@ export default function FeedbackPage() {
     }
   };
 
-  // Handle AI consolidation (facilitator only) - with optional type filter
-  const handleConsolidate = async (selectedTypes?: feedbackService.SuggestionType[]) => {
+  // Handle AI consolidation (facilitator only) - with optional type filter and ID override
+  const handleConsolidate = async (selectedTypes?: feedbackService.SuggestionType[], overrideSuggestionIds?: string[]) => {
     if (!round || !isFacilitator) return;
     setIsConsolidating(true);
 
@@ -218,9 +218,10 @@ export default function FeedbackPage() {
       await feedbackService.updateRoundPhase(round.id, "consolidating");
       setRound(prev => prev ? { ...prev, phase: "consolidating" } : null);
 
-      // Filter suggestions by selected IDs (which already respect type filters and cluster selection)
+      // Filter suggestions by selected IDs or override IDs
+      const idsToUse = overrideSuggestionIds || selectedSuggestionIds;
       const filteredSuggestions = suggestions.filter(s =>
-        selectedSuggestionIds.includes(s.id) && !dismissedClusterIds.includes(s.cluster_id)
+        idsToUse.includes(s.id) && !dismissedClusterIds.includes(s.cluster_id)
       );
 
       // Call AI consolidation API - include AI instructions for comments
@@ -714,6 +715,16 @@ export default function FeedbackPage() {
     return s && !dismissedClusterIds.includes(s.cluster_id);
   }).length;
 
+  // Quick consolidate: consolidate all suggestions of given types immediately (no manual selection needed)
+  const handleQuickConsolidate = (types: feedbackService.SuggestionType[]) => {
+    if (!round || !isFacilitator) return;
+    const matchingIds = suggestions
+      .filter(s => types.includes(s.suggestion_type as feedbackService.SuggestionType) && !dismissedClusterIds.includes(s.cluster_id))
+      .map(s => s.id);
+    if (matchingIds.length === 0) return;
+    handleConsolidate(types, matchingIds);
+  };
+
   // Handle consolidation with cluster selection
   const handleConsolidateSelected = (mode: "all" | "one_by_one") => {
     if (mode === "all") {
@@ -855,6 +866,7 @@ export default function FeedbackPage() {
           totalSuggestionCount={suggestions.length}
           activeTypeFilters={activeTypeFilters}
           onConsolidateSelected={handleConsolidateSelected}
+          onQuickConsolidate={handleQuickConsolidate}
         />
 
         {/* Phase: Collecting */}
