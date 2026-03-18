@@ -35,7 +35,7 @@ type StepPhase =
   | "approved";
 
 export function DoelenStep({ onComplete, readOnly: readOnlyProp }: DoelenStepProps) {
-  const { documents, getApprovedText, saveApprovedText, removeApprovedText, updateFlowState, flowState, isViewerMode, updateDoelenStepState, getDoelenStepState, currentSession } = useSession();
+  const { documents, getApprovedText, saveApprovedText, removeApprovedText, updateFlowState, flowState, isViewerMode, updateDoelenStepState, getDoelenStepState, currentSession, completeStep, unlockStep } = useSession();
   const isReadOnly = readOnlyProp ?? isViewerMode;
   const { showToast } = useToast();
 
@@ -302,6 +302,18 @@ export function DoelenStep({ onComplete, readOnly: readOnlyProp }: DoelenStepPro
       phase
     });
   }, [currentSession, clusters, selectedClusterIds, allVotes, ranking, formulations, phase, isReadOnly]);
+
+  // Auto-complete doelen step when clusters exist — ensures you can always navigate to scope
+  useEffect(() => {
+    if (!currentSession || isReadOnly) return;
+    if (clusters.length === 0) return;
+    if (!isInitialLoadComplete.current) return;
+    if (flowState.steps.doelen === "completed") return; // Already completed
+
+    console.log("[DoelenStep] Clusters exist, auto-completing doelen step");
+    completeStep("doelen");
+    unlockStep("scope");
+  }, [currentSession, clusters.length, isReadOnly, flowState.steps.doelen, completeStep, unlockStep]);
 
   // Sync clusters to active feedback round when clusters change
   useEffect(() => {
