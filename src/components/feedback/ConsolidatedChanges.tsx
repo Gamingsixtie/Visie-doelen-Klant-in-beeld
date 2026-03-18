@@ -20,6 +20,7 @@ interface ConsolidatedChangesProps {
   onEditChange?: (changeId: string, updates: Partial<ProposedChange>) => void;
   onRefineChange?: (changeId: string, feedback: string) => Promise<void>;
   onDeleteChange?: (changeId: string) => void;
+  onGenerateProposal?: (changeId: string) => Promise<void>;
   suggestions?: FeedbackSuggestion[];
 }
 
@@ -41,6 +42,7 @@ export function ConsolidatedChanges({
   onEditChange,
   onRefineChange,
   onDeleteChange,
+  onGenerateProposal,
   suggestions
 }: ConsolidatedChangesProps) {
   // Filter & sort state
@@ -145,6 +147,7 @@ export function ConsolidatedChanges({
       onEditChange={onEditChange}
       onRefineChange={onRefineChange}
       onDeleteChange={onDeleteChange}
+      onGenerateProposal={onGenerateProposal}
       suggestions={suggestions}
     />
   );
@@ -363,6 +366,7 @@ function ChangeCard({
   onEditChange,
   onRefineChange,
   onDeleteChange,
+  onGenerateProposal,
   suggestions
 }: {
   change: ProposedChange;
@@ -374,12 +378,14 @@ function ChangeCard({
   onEditChange?: (changeId: string, updates: Partial<ProposedChange>) => void;
   onRefineChange?: (changeId: string, feedback: string) => Promise<void>;
   onDeleteChange?: (changeId: string) => void;
+  onGenerateProposal?: (changeId: string) => Promise<void>;
   suggestions?: FeedbackSuggestion[];
 }) {
   const [showCommentFor, setShowCommentFor] = useState<"disagree" | "abstain" | null>(null);
   const [voteComment, setVoteComment] = useState("");
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
+  const [isGenerating, setIsGenerating] = useState(false);
   const [editName, setEditName] = useState(change.proposed_name);
   const [editDescription, setEditDescription] = useState(change.proposed_description);
   const [editRationale, setEditRationale] = useState(change.rationale);
@@ -643,7 +649,7 @@ function ChangeCard({
         )}
 
         {!nameChanged && !descChanged && change.change_type === "comment_only" && (
-          <div className="space-y-2">
+          <div className="space-y-3">
             {/* Show source comments */}
             {(() => {
               const sourceComments = suggestions?.filter(s =>
@@ -665,12 +671,46 @@ function ChangeCard({
               }
               return null;
             })()}
-            <div className="flex items-center gap-2 text-xs text-gray-400 bg-gray-50 rounded-lg px-3 py-2 border border-dashed border-gray-200">
-              <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-              </svg>
-              <span>Geen tekstwijziging — deze opmerkingen worden genoteerd maar veranderen niets aan de doeltekst bij doorvoeren.</span>
-            </div>
+
+            {/* Generate text proposal button */}
+            {onGenerateProposal && (
+              <button
+                onClick={async () => {
+                  setIsGenerating(true);
+                  try {
+                    await onGenerateProposal(change.change_id);
+                  } finally {
+                    setIsGenerating(false);
+                  }
+                }}
+                disabled={isGenerating}
+                className="w-full px-4 py-3 bg-blue-50 border-2 border-dashed border-blue-300 rounded-lg text-sm font-medium text-blue-700 hover:bg-blue-100 hover:border-blue-400 disabled:opacity-50 disabled:cursor-not-allowed transition-all flex items-center justify-center gap-2"
+              >
+                {isGenerating ? (
+                  <>
+                    <div className="spinner w-4 h-4" />
+                    AI genereert tekstvoorstel...
+                  </>
+                ) : (
+                  <>
+                    <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                    </svg>
+                    Toon wat er verandert als we deze opmerking verwerken
+                  </>
+                )}
+              </button>
+            )}
+
+            {!onGenerateProposal && (
+              <div className="flex items-center gap-2 text-xs text-gray-400 bg-gray-50 rounded-lg px-3 py-2 border border-dashed border-gray-200">
+                <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>Geen tekstwijziging — alleen opmerkingen geregistreerd.</span>
+              </div>
+            )}
           </div>
         )}
 

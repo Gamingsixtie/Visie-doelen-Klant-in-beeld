@@ -516,6 +516,70 @@ export default function FeedbackPage() {
     }
   };
 
+  // Generate text proposal for comment_only changes
+  const handleGenerateProposal = async (changeId: string) => {
+    if (!round || !isFacilitator || !consolidatedChanges) return;
+
+    const change = consolidatedChanges.changes.find(c => c.change_id === changeId);
+    if (!change) return;
+
+    // Gather source comments for context
+    const sourceComments = suggestions.filter(s =>
+      change.source_suggestions.includes(s.id) ||
+      (s.cluster_id === change.cluster_id && s.suggestion_type === "comment")
+    );
+    const commentTexts = sourceComments
+      .map(s => `${s.member_name}: ${(s.content as Record<string, unknown>).text || ""}`)
+      .join("\n");
+
+    const feedback = `Verwerk de volgende opmerkingen van MT-leden in de doeltekst. Laat de tekst inhoudelijk verrijken op basis van deze feedback, maar behoud de kernformulering. Geef een concreet tekstvoorstel.\n\nOpmerkingen:\n${commentTexts || change.rationale}`;
+
+    const response = await fetch("/api/refine-change", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        proposedChange: change,
+        feedback
+      })
+    });
+
+    const data = await response.json();
+
+    if (!data.success || !data.refined) {
+      throw new Error(data.error || "Genereren mislukt");
+    }
+
+    // Update change from comment_only to edit with the generated proposal
+    const updatedChanges: ConsolidatedChangesType = {
+      ...consolidatedChanges,
+      changes: consolidatedChanges.changes.map(c =>
+        c.change_id === changeId
+          ? {
+              ...c,
+              change_type: "edit" as const,
+              proposed_name: data.refined.proposed_name,
+              proposed_description: data.refined.proposed_description,
+              summary: data.refined.summary
+            }
+          : c
+      )
+    };
+
+    const success = await feedbackService.saveConsolidatedChangesWithHistory(
+      round.id,
+      updatedChanges,
+      "Tekstvoorstel gegenereerd uit opmerkingen"
+    );
+
+    if (success) {
+      // Reset votes since the change type changed
+      await feedbackService.deleteChangeVotesForChange(round.id, changeId);
+      setChangeVotes(prev => prev.filter(v => v.change_id !== changeId));
+      setRound(prev => prev ? { ...prev, consolidated_changes: updatedChanges } : null);
+      loadData();
+    }
+  };
+
   // Handle deleting a rejected change (facilitator only)
   const handleDeleteChange = async (changeId: string) => {
     if (!round || !isFacilitator || !consolidatedChanges) return;
@@ -1006,6 +1070,7 @@ export default function FeedbackPage() {
             onEditChange={handleEditChange}
             onRefineChange={handleRefineChange}
             onDeleteChange={isFacilitator ? handleDeleteChange : undefined}
+            onGenerateProposal={isFacilitator ? handleGenerateProposal : undefined}
             suggestions={suggestions}
           />
         )}
