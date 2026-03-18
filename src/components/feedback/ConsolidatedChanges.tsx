@@ -377,6 +377,7 @@ function ChangeCard({
   const [isEditing, setIsEditing] = useState(false);
   const [editName, setEditName] = useState(change.proposed_name);
   const [editDescription, setEditDescription] = useState(change.proposed_description);
+  const [editRationale, setEditRationale] = useState(change.rationale);
   const [showRefineDialog, setShowRefineDialog] = useState(false);
   const [refineFeedback, setRefineFeedback] = useState("");
   const [isRefining, setIsRefining] = useState(false);
@@ -407,7 +408,8 @@ function ChangeCard({
     if (!onEditChange) return;
     onEditChange(change.change_id, {
       proposed_name: editName,
-      proposed_description: editDescription
+      proposed_description: editDescription,
+      rationale: editRationale
     });
     setIsEditing(false);
   };
@@ -415,6 +417,7 @@ function ChangeCard({
   const handleCancelEdit = () => {
     setEditName(change.proposed_name);
     setEditDescription(change.proposed_description);
+    setEditRationale(change.rationale);
     setIsEditing(false);
   };
 
@@ -504,6 +507,17 @@ function ChangeCard({
       {/* Inline edit form */}
       {isEditing && (
         <div className="px-5 py-4 bg-cito-blue/5 border-b space-y-3">
+          <div>
+            <label className="block text-xs font-medium text-gray-700 mb-1">Rationale</label>
+            <textarea
+              value={editRationale}
+              onChange={(e) => setEditRationale(e.target.value)}
+              className="w-full px-3 py-2 border border-amber-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-amber-400 text-sm bg-amber-50/50"
+              rows={3}
+              autoFocus
+            />
+            <p className="text-xs text-gray-400 mt-0.5 italic">Pas de rationale aan om zinnen beter lopend te maken.</p>
+          </div>
           <div>
             <label className="block text-xs font-medium text-gray-700 mb-1">Naam</label>
             <input
