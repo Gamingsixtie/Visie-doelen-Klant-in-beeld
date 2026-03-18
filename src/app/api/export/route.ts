@@ -1,6 +1,36 @@
 import { NextRequest, NextResponse } from "next/server";
 import { Document, Packer, Paragraph, TextRun, HeadingLevel, AlignmentType } from "docx";
 
+// Split long text into separate paragraphs for readability
+function textToParagraphs(text: string, options?: { size?: number; italics?: boolean }): Paragraph[] {
+  const size = options?.size ?? 24;
+  const italics = options?.italics ?? false;
+
+  if (!text || text.trim() === "") {
+    return [
+      new Paragraph({
+        children: [new TextRun({ text: "Niet ingevuld", size, italics: true })],
+        spacing: { after: 200 }
+      })
+    ];
+  }
+
+  // Split on double newlines (explicit paragraphs) or fall back to single newlines
+  const blocks = text.includes("\n\n")
+    ? text.split(/\n\n+/)
+    : text.split(/\n/);
+
+  return blocks
+    .map((block) => block.trim())
+    .filter((block) => block.length > 0)
+    .map((block, index, arr) =>
+      new Paragraph({
+        children: [new TextRun({ text: block, size, italics })],
+        spacing: { after: index < arr.length - 1 ? 120 : 200 }
+      })
+    );
+}
+
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
@@ -76,15 +106,7 @@ export async function POST(request: NextRequest) {
               heading: HeadingLevel.HEADING_2,
               spacing: { before: 200, after: 100 }
             }),
-            new Paragraph({
-              children: [
-                new TextRun({
-                  text: vision?.currentSituation || "Niet ingevuld",
-                  size: 24
-                })
-              ],
-              spacing: { after: 200 }
-            }),
+            ...textToParagraphs(vision?.currentSituation),
 
             // Gewenste situatie
             new Paragraph({
@@ -98,15 +120,7 @@ export async function POST(request: NextRequest) {
               heading: HeadingLevel.HEADING_2,
               spacing: { before: 200, after: 100 }
             }),
-            new Paragraph({
-              children: [
-                new TextRun({
-                  text: vision?.desiredSituation || "Niet ingevuld",
-                  size: 24
-                })
-              ],
-              spacing: { after: 200 }
-            }),
+            ...textToParagraphs(vision?.desiredSituation),
 
             // Beweging
             new Paragraph({
@@ -120,15 +134,7 @@ export async function POST(request: NextRequest) {
               heading: HeadingLevel.HEADING_2,
               spacing: { before: 200, after: 100 }
             }),
-            new Paragraph({
-              children: [
-                new TextRun({
-                  text: vision?.changeDirection || "Niet ingevuld",
-                  size: 24
-                })
-              ],
-              spacing: { after: 200 }
-            }),
+            ...textToParagraphs(vision?.changeDirection),
 
             // Belanghebbenden
             new Paragraph({
@@ -142,15 +148,7 @@ export async function POST(request: NextRequest) {
               heading: HeadingLevel.HEADING_2,
               spacing: { before: 200, after: 100 }
             }),
-            new Paragraph({
-              children: [
-                new TextRun({
-                  text: vision?.stakeholders || "Niet ingevuld",
-                  size: 24
-                })
-              ],
-              spacing: { after: 200 }
-            }),
+            ...textToParagraphs(vision?.stakeholders),
 
             // Generated Vision (if available)
             ...(generatedVision?.uitgebreid
@@ -166,15 +164,7 @@ export async function POST(request: NextRequest) {
                     heading: HeadingLevel.HEADING_2,
                     spacing: { before: 300, after: 100 }
                   }),
-                  new Paragraph({
-                    children: [
-                      new TextRun({
-                        text: generatedVision.uitgebreid,
-                        size: 24
-                      })
-                    ],
-                    spacing: { after: 200 }
-                  }),
+                  ...textToParagraphs(generatedVision.uitgebreid),
                   ...(generatedVision.beknopt
                     ? [
                         new Paragraph({
@@ -188,16 +178,7 @@ export async function POST(request: NextRequest) {
                           ],
                           spacing: { before: 200, after: 50 }
                         }),
-                        new Paragraph({
-                          children: [
-                            new TextRun({
-                              text: generatedVision.beknopt,
-                              italics: true,
-                              size: 24
-                            })
-                          ],
-                          spacing: { after: 200 }
-                        })
+                        ...textToParagraphs(generatedVision.beknopt, { italics: true })
                       ]
                     : [])
                 ]
@@ -218,17 +199,41 @@ export async function POST(request: NextRequest) {
             }),
 
             // Goals
-            ...(goals || []).map(
-              (goal: { rank: number; text: string }) =>
-                new Paragraph({
-                  children: [
-                    new TextRun({
-                      text: `${goal.rank}. ${goal.text || "Niet ingevuld"}`,
-                      size: 24
+            ...(goals || []).flatMap(
+              (goal: { rank: number; text: string }) => {
+                const goalText = goal.text || "Niet ingevuld";
+                const lines = goalText.split(/\n+/).map((l: string) => l.trim()).filter((l: string) => l.length > 0);
+
+                if (lines.length <= 1) {
+                  return [
+                    new Paragraph({
+                      children: [
+                        new TextRun({ text: `${goal.rank}. ${goalText}`, size: 24 })
+                      ],
+                      spacing: { after: 150 }
                     })
-                  ],
-                  spacing: { after: 100 }
-                })
+                  ];
+                }
+
+                // First line with rank number, rest as continuation paragraphs
+                return [
+                  new Paragraph({
+                    children: [
+                      new TextRun({ text: `${goal.rank}. ${lines[0]}`, size: 24 })
+                    ],
+                    spacing: { after: 80 }
+                  }),
+                  ...lines.slice(1).map((line: string, i: number) =>
+                    new Paragraph({
+                      children: [
+                        new TextRun({ text: line, size: 24 })
+                      ],
+                      indent: { left: 360 },
+                      spacing: { after: i < lines.length - 2 ? 80 : 150 }
+                    })
+                  )
+                ];
+              }
             ),
 
             // Scope Section Header
