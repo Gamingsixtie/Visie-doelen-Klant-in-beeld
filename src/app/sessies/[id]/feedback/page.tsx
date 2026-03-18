@@ -304,18 +304,29 @@ export default function FeedbackPage() {
         .map(c => c.change_id);
 
       // Apply only majority-approved changes to clusters (any change_type that modifies text)
+      // If multiple approved changes exist on the same cluster, apply them sequentially
+      // (edits/merges first, then comment-derived edits)
       const updatedClusters = clusters.map(cluster => {
-        const change = consolidatedChanges.changes.find(
-          c => c.cluster_id === cluster.id && approvedChangeIds.includes(c.change_id)
-        );
-        if (change && (change.proposed_name !== change.original_name || change.proposed_description !== change.original_description)) {
-          return {
-            ...cluster,
-            name: change.proposed_name,
-            description: change.proposed_description
-          };
+        const clusterChanges = consolidatedChanges.changes
+          .filter(c => c.cluster_id === cluster.id && approvedChangeIds.includes(c.change_id))
+          .sort((a, b) => {
+            // Apply edits/merges before comment-derived edits
+            const aWeight = a.change_type === "comment_only" ? 1 : 0;
+            const bWeight = b.change_type === "comment_only" ? 1 : 0;
+            return aWeight - bWeight;
+          });
+
+        let result = { ...cluster };
+        for (const change of clusterChanges) {
+          if (change.proposed_name !== change.original_name || change.proposed_description !== change.original_description) {
+            result = {
+              ...result,
+              name: change.proposed_name,
+              description: change.proposed_description
+            };
+          }
         }
-        return cluster;
+        return result;
       });
 
       // Save updated clusters to Supabase session flow_state (step-type aware)

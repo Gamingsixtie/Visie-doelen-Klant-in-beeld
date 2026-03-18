@@ -55,6 +55,55 @@ export async function POST(request: NextRequest) {
 
     const consolidated = JSON.parse(jsonMatch[0]);
 
+    // Post-processing: merge multiple non-merge changes on the same cluster into one
+    if (consolidated.changes && Array.isArray(consolidated.changes)) {
+      const clusterGroups: Record<string, typeof consolidated.changes> = {};
+      const mergeChanges: typeof consolidated.changes = [];
+
+      for (const change of consolidated.changes) {
+        if (change.change_type === "merge") {
+          mergeChanges.push(change);
+        } else {
+          if (!clusterGroups[change.cluster_id]) {
+            clusterGroups[change.cluster_id] = [];
+          }
+          clusterGroups[change.cluster_id].push(change);
+        }
+      }
+
+      const mergedChanges = [];
+      for (const [clusterId, group] of Object.entries(clusterGroups)) {
+        if (group.length === 1) {
+          mergedChanges.push(group[0]);
+        } else {
+          // Multiple changes on same cluster — take the one with actual text changes as base
+          const edits = group.filter(
+            (c: { change_type: string; proposed_name: string; original_name: string; proposed_description: string; original_description: string }) =>
+              c.change_type === "edit" && (c.proposed_name !== c.original_name || c.proposed_description !== c.original_description)
+          );
+          const base = edits.length > 0 ? edits[edits.length - 1] : group[0];
+
+          // Merge source_suggestions and member_sources from all changes
+          const allSources = [...new Set(group.flatMap((c: { source_suggestions?: string[] }) => c.source_suggestions || []))];
+          const allMembers = [...new Set(group.flatMap((c: { member_sources?: string[] }) => c.member_sources || []))];
+          const allRationales = group.map((c: { rationale: string }) => c.rationale).filter(Boolean);
+
+          mergedChanges.push({
+            ...base,
+            change_id: `merged-${clusterId}`,
+            source_suggestions: allSources,
+            member_sources: allMembers,
+            rationale: allRationales.join(" | "),
+            summary: group.length > 1
+              ? `Gecombineerd voorstel (${group.length} suggesties verwerkt): ${base.summary}`
+              : base.summary,
+          });
+        }
+      }
+
+      consolidated.changes = [...mergedChanges, ...mergeChanges];
+    }
+
     return NextResponse.json({
       success: true,
       consolidated

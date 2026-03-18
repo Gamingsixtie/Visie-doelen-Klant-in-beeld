@@ -323,6 +323,13 @@ Analyseer alle feedback en stel concrete wijzigingen voor. Volg deze regels STRI
    - Past bij "Werken aan programma's" methodiek (Prevaas & Van Loon)
    - Bij doelstellingen: zo geformuleerd dat je er gewenste effecten, benodigde vermogens en concrete inspanningen uit kunt afleiden
 
+6. ÉÉN VOORSTEL PER DOEL
+   - Als er op hetzelfde doel meerdere suggesties staan (tekstwijzigingen, opmerkingen, merges), combineer deze tot ÉÉN wijzigingsvoorstel
+   - Verwerk zowel de tekstwijziging als relevante opmerkingen in één proposed_name/proposed_description
+   - De rationale moet vermelden welke feedback is verwerkt (bijv. "Tekstwijziging van Bert verwerkt + opmerking van Leontine over X meegenomen")
+   - Dit zorgt ervoor dat het team in één keer kan stemmen over het gecombineerde resultaat
+   - UITZONDERING: merge-suggesties mogen apart staan als ze een andere cluster betreffen
+
 WIJZIGINGSTYPEN:
 - "edit": Tekstuele aanpassing van naam en/of beschrijving. Gebruik dit type ook voor opmerkingen die inhoudelijk relevant zijn — vertaal de opmerking naar een concreet tekstvoorstel zodat de facilitator kan zien wat er precies zou veranderen. Geef in de rationale aan dat dit gebaseerd is op een opmerking (niet op een expliciete tekstwijziging).
 - "merge": Samenvoegen van twee of meer clusters (als feedback hier expliciet om vraagt)
@@ -430,6 +437,13 @@ Analyseer alle feedback en stel concrete wijzigingen voor. Volg deze regels STRI
 5. SECTOR-NEUTRAAL
    - Formuleringen moeten sector-overstijgend zijn
    - Past bij "Werken aan programma's" methodiek (Prevaas & Van Loon)
+
+6. ÉÉN VOORSTEL PER ITEM
+   - Als er op hetzelfde item meerdere suggesties staan (tekstwijzigingen, opmerkingen, merges), combineer deze tot ÉÉN wijzigingsvoorstel
+   - Verwerk zowel de tekstwijziging als relevante opmerkingen in één proposed_name/proposed_description
+   - De rationale moet vermelden welke feedback is verwerkt
+   - Dit zorgt ervoor dat het team in één keer kan stemmen over het gecombineerde resultaat
+   - UITZONDERING: merge-suggesties mogen apart staan als ze een andere cluster betreffen
 
 WIJZIGINGSTYPEN:
 - "edit": Tekstuele aanpassing van naam en/of beschrijving. Gebruik dit type ook voor opmerkingen die inhoudelijk relevant zijn — vertaal de opmerking naar een concreet tekstvoorstel zodat de facilitator kan zien wat er precies zou veranderen. Geef in de rationale aan dat dit gebaseerd is op een opmerking (niet op een expliciete tekstwijziging).
