@@ -10,7 +10,9 @@ import { VisieSummaryStep } from "@/components/steps/VisieSummaryStep";
 import { DoelenStep } from "@/components/steps/DoelenStep";
 import { ScopeStep } from "@/components/steps/ScopeStep";
 import { ExportStep } from "@/components/steps/ExportStep";
-import type { FlowStep } from "@/lib/types";
+import type { FlowStep, FlowState } from "@/lib/types";
+import { supabase } from "@/lib/supabase";
+import * as persistence from "@/lib/persistence";
 
 export default function SessionPage() {
   const router = useRouter();
@@ -75,7 +77,7 @@ export default function SessionPage() {
     return () => clearInterval(interval);
   }, [autoRefresh, isSyncMode, sessionId, loadSessionFromSync]);
 
-  // Load session on mount
+  // Load session on mount — merge Supabase step statuses BEFORE loading from localStorage
   useEffect(() => {
     const initSession = async () => {
       if (!sessionId) return;
@@ -86,10 +88,49 @@ export default function SessionPage() {
         const success = await loadSessionFromSync(sessionId);
         setSyncStatus(success ? "success" : "failed");
         if (success) {
-          setAutoRefresh(true); // Enable auto-refresh for synced sessions
+          setAutoRefresh(true);
         }
       } else {
-        // Presenter mode - load from local storage
+        // Presenter mode: merge Supabase steps into localStorage BEFORE loading
+        if (supabase) {
+          try {
+            const { data: rows } = await supabase
+              .from("sessions")
+              .select("flow_state")
+              .eq("id", sessionId)
+              .limit(1);
+
+            const row = rows?.[0];
+            if (row?.flow_state) {
+              const remoteFlowState = (row.flow_state as Record<string, unknown>).flowState as FlowState | undefined;
+              if (remoteFlowState?.steps) {
+                const localFlowState = persistence.getFlowState(sessionId);
+                if (localFlowState) {
+                  const statusPriority: Record<string, number> = { locked: 0, active: 1, completed: 2 };
+                  let hasUpdates = false;
+                  const mergedSteps = { ...localFlowState.steps };
+
+                  for (const [step, remoteStatus] of Object.entries(remoteFlowState.steps)) {
+                    const localStatus = localFlowState.steps[step as FlowStep];
+                    if ((statusPriority[remoteStatus] || 0) > (statusPriority[localStatus] || 0)) {
+                      mergedSteps[step as FlowStep] = remoteStatus as "locked" | "active" | "completed";
+                      hasUpdates = true;
+                    }
+                  }
+
+                  if (hasUpdates) {
+                    console.log("[SessionPage] Merging Supabase step statuses into localStorage before load");
+                    persistence.saveFlowState(sessionId, { ...localFlowState, steps: mergedSteps });
+                  }
+                }
+              }
+            }
+          } catch (err) {
+            console.error("[SessionPage] Error merging Supabase steps:", err);
+          }
+        }
+
+        // Now load from localStorage (which has merged data)
         loadSession(sessionId);
       }
 
