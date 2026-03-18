@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { useSession } from "@/lib/session-context";
 import { useToast, ConfirmDialog, ActivityTimer, TIMER_PRESETS } from "@/components/ui";
 import { RefineWithAI } from "@/components/ui/RefineWithAI";
 import { AsyncFeedbackSection } from "@/components/feedback";
 import * as persistence from "@/lib/persistence";
+import { supabase } from "@/lib/supabase";
 
 interface ScopeStepProps {
   onComplete: () => void;
@@ -85,7 +86,9 @@ export function ScopeStep({ onComplete, readOnly: readOnlyProp }: ScopeStepProps
     return items;
   }, [documents]);
 
-  // Load scope items: saved items first, fallback to document derivation
+  // Load scope items: localStorage first, then Supabase, then derive from documents
+  const isInitialLoadDone = useRef(false);
+
   useEffect(() => {
     const approved = getApprovedText("out_of_scope");
     if (approved) {
@@ -95,18 +98,54 @@ export function ScopeStep({ onComplete, readOnly: readOnlyProp }: ScopeStepProps
 
     if (!currentSession) return;
 
-    // Try loading saved scope items first
-    const savedItems = persistence.getScopeItems(currentSession.id);
-    if (savedItems && savedItems.length > 0) {
-      setScopeItems(savedItems);
-    } else {
-      // Fallback: derive from documents
+    const loadScopeItems = async () => {
+      // 1. Try localStorage first (fastest)
+      const savedItems = persistence.getScopeItems(currentSession.id);
+      if (savedItems && savedItems.length > 0) {
+        console.log("[ScopeStep] Loaded from localStorage:", savedItems.length, "items");
+        setScopeItems(savedItems);
+        isInitialLoadDone.current = true;
+        return;
+      }
+
+      // 2. Try Supabase (data might exist there but not in localStorage)
+      if (supabase) {
+        try {
+          const { data: sessionRows } = await supabase
+            .from("sessions")
+            .select("flow_state")
+            .eq("id", currentSession.id)
+            .limit(1);
+
+          const session = sessionRows?.[0];
+          if (session?.flow_state) {
+            const flowState = session.flow_state as Record<string, unknown>;
+            const supabaseScopeItems = flowState.scopeItems as ScopeItem[] | undefined;
+            if (supabaseScopeItems && supabaseScopeItems.length > 0) {
+              console.log("[ScopeStep] Loaded from Supabase:", supabaseScopeItems.length, "items");
+              setScopeItems(supabaseScopeItems);
+              // Sync back to localStorage
+              persistence.saveScopeItems(currentSession.id, supabaseScopeItems);
+              isInitialLoadDone.current = true;
+              return;
+            }
+          }
+        } catch (err) {
+          console.error("[ScopeStep] Error loading from Supabase:", err);
+        }
+      }
+
+      // 3. Fallback: derive from documents
       const derived = deriveItemsFromDocuments();
       setScopeItems(derived);
       if (derived.length > 0) {
         persistence.saveScopeItems(currentSession.id, derived);
       }
-    }
+      isInitialLoadDone.current = true;
+    };
+
+    isInitialLoadDone.current = false;
+    loadScopeItems();
   }, [currentSession, getApprovedText, deriveItemsFromDocuments]);
 
   const handleAddItem = () => {
