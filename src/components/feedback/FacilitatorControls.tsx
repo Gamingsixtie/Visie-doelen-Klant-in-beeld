@@ -4,6 +4,8 @@ import { useState } from "react";
 import type { FeedbackPhase, ChangeVote, ProposedChange, ConsolidatedChangesVersion, SuggestionType } from "@/lib/feedback-service";
 import { MT_MEMBERS } from "@/lib/types";
 
+type ConsolidationMode = "all" | "one_by_one";
+
 interface FacilitatorControlsProps {
   phase: FeedbackPhase;
   isFacilitator: boolean;
@@ -18,13 +20,17 @@ interface FacilitatorControlsProps {
   isApplying: boolean;
   versions?: ConsolidatedChangesVersion[];
   onRestoreVersion?: (versionId: string) => void;
+  // New props for enhanced selection
+  selectedClusterCount?: number;
+  selectedSuggestionCount?: number;
+  activeTypeFilters?: SuggestionType[];
+  onConsolidateSelected?: (mode: ConsolidationMode) => void;
 }
 
 export function FacilitatorControls({
   phase,
   isFacilitator,
   suggestionsCount,
-  suggestionsByType,
   changes,
   changeVotes,
   onStartConsolidation,
@@ -33,13 +39,16 @@ export function FacilitatorControls({
   isConsolidating,
   isApplying,
   versions,
-  onRestoreVersion
+  onRestoreVersion,
+  selectedClusterCount = 0,
+  selectedSuggestionCount = 0,
+  activeTypeFilters = ["text_edit", "merge", "comment"],
+  onConsolidateSelected,
 }: FacilitatorControlsProps) {
   const [confirmApply, setConfirmApply] = useState(false);
   const [confirmReset, setConfirmReset] = useState(false);
   const [showHistory, setShowHistory] = useState(false);
   const [confirmRestoreId, setConfirmRestoreId] = useState<string | null>(null);
-  const [selectedTypes, setSelectedTypes] = useState<SuggestionType[]>(["text_edit", "merge", "comment"]);
 
   if (!isFacilitator) return null;
 
@@ -75,76 +84,92 @@ export function FacilitatorControls({
         <h3 className="font-semibold text-cito-blue">Facilitator beheer</h3>
       </div>
 
-      {phase === "collecting" && (() => {
-        const typeLabels: { type: SuggestionType; label: string }[] = [
-          { type: "text_edit", label: "Tekstaanpassingen" },
-          { type: "merge", label: "Samenvoeg-voorstellen" },
-          { type: "comment", label: "Opmerkingen" },
-        ];
-        const selectedCount = suggestionsByType
-          ? selectedTypes.reduce((sum, t) => sum + (suggestionsByType[t] || 0), 0)
-          : suggestionsCount;
-        const toggleType = (type: SuggestionType) => {
-          setSelectedTypes(prev =>
-            prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]
-          );
-        };
-
-        return (
-          <div>
+      {phase === "collecting" && (
+        <div>
+          {suggestionsCount === 0 ? (
             <p className="text-sm text-gray-600 mb-3">
-              {suggestionsCount > 0
-                ? `Er zijn ${suggestionsCount} suggesties verzameld. Selecteer welke feedback te consolideren.`
-                : "Wacht tot MT-leden feedback hebben gegeven, of sluit de ronde als er geen feedback nodig is."
-              }
+              Wacht tot MT-leden feedback hebben gegeven, of sluit de ronde als er geen feedback nodig is.
             </p>
+          ) : (
+            <div>
+              <p className="text-sm text-gray-600 mb-3">
+                Er zijn {suggestionsCount} suggesties verzameld. Selecteer hierboven de doelen en feedbacktypes die je wilt consolideren.
+              </p>
 
-            {suggestionsCount > 0 && suggestionsByType && (
-              <div className="mb-3 space-y-1.5">
-                {typeLabels.map(({ type, label }) => {
-                  const count = suggestionsByType[type] || 0;
-                  return (
-                    <label key={type} className={`flex items-center gap-2 p-2 rounded-lg cursor-pointer transition-colors ${count === 0 ? "opacity-40" : "hover:bg-white/50"}`}>
-                      <input
-                        type="checkbox"
-                        checked={selectedTypes.includes(type) && count > 0}
-                        disabled={count === 0}
-                        onChange={() => toggleType(type)}
-                        className="w-4 h-4 rounded border-gray-300 text-cito-blue focus:ring-cito-blue"
-                      />
-                      <span className="text-sm text-gray-700">{label}</span>
-                      <span className="text-xs text-gray-400 ml-auto">{count} suggestie{count !== 1 ? "s" : ""}</span>
-                    </label>
-                  );
-                })}
-                <p className="text-xs text-gray-400 mt-1 italic">
-                  Selecteer \u00e9\u00e9n type per ronde voor iteratieve verwerking, of alles tegelijk.
-                </p>
-              </div>
-            )}
-
-            <button
-              onClick={() => onStartConsolidation(selectedTypes)}
-              disabled={isConsolidating || selectedCount === 0}
-              className="px-4 py-2 bg-cito-blue text-white rounded-lg hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
-            >
-              {isConsolidating ? (
-                <>
-                  <div className="spinner w-4 h-4" />
-                  AI consolideert feedback...
-                </>
-              ) : (
-                <>
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
-                  </svg>
-                  Consolideren ({selectedCount} suggestie{selectedCount !== 1 ? "s" : ""})
-                </>
+              {/* Selection summary */}
+              {selectedClusterCount > 0 && selectedSuggestionCount > 0 && (
+                <div className="mb-3 p-3 bg-white/60 rounded-lg border border-cito-blue/10">
+                  <p className="text-sm font-medium text-gray-700 mb-1">
+                    Klaar om te consolideren:
+                  </p>
+                  <p className="text-sm text-gray-600">
+                    {selectedSuggestionCount} suggestie{selectedSuggestionCount !== 1 ? "s" : ""} uit {selectedClusterCount} doel{selectedClusterCount !== 1 ? "en" : ""}
+                    {activeTypeFilters.length < 3 && (
+                      <span className="text-gray-400">
+                        {" "}(gefilterd op {activeTypeFilters.map(t =>
+                          t === "text_edit" ? "tekstwijzigingen" :
+                          t === "merge" ? "samenvoegen" : "opmerkingen"
+                        ).join(", ")})
+                      </span>
+                    )}
+                  </p>
+                </div>
               )}
-            </button>
-          </div>
-        );
-      })()}
+
+              {/* Consolidation action buttons */}
+              <div className="flex flex-wrap gap-2">
+                {/* All at once button */}
+                <button
+                  onClick={() => {
+                    if (onConsolidateSelected) {
+                      onConsolidateSelected("all");
+                    } else {
+                      onStartConsolidation(activeTypeFilters);
+                    }
+                  }}
+                  disabled={isConsolidating || selectedSuggestionCount === 0}
+                  className="px-4 py-2 bg-cito-blue text-white rounded-lg hover:bg-blue-800 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                >
+                  {isConsolidating ? (
+                    <>
+                      <div className="spinner w-4 h-4" />
+                      AI consolideert feedback...
+                    </>
+                  ) : (
+                    <>
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                      </svg>
+                      Alles tegelijk consolideren ({selectedSuggestionCount})
+                    </>
+                  )}
+                </button>
+
+                {/* One by one button - only show if multiple clusters selected */}
+                {selectedClusterCount > 1 && onConsolidateSelected && (
+                  <button
+                    onClick={() => onConsolidateSelected("one_by_one")}
+                    disabled={isConsolidating || selectedSuggestionCount === 0}
+                    className="px-4 py-2 bg-white text-cito-blue border border-cito-blue/30 rounded-lg hover:bg-blue-50 disabled:opacity-50 disabled:cursor-not-allowed flex items-center gap-2"
+                  >
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h7" />
+                    </svg>
+                    Eén voor één ({selectedClusterCount} rondes)
+                  </button>
+                )}
+              </div>
+
+              {selectedClusterCount > 1 && (
+                <p className="text-xs text-gray-400 mt-2 italic">
+                  &ldquo;Alles tegelijk&rdquo; consolideert alle geselecteerde doelen in één ronde.
+                  &ldquo;Eén voor één&rdquo; start per doel een aparte consolidatie.
+                </p>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {phase === "consolidating" && (
         <div className="flex items-center gap-3">

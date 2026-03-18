@@ -48,6 +48,11 @@ export default function FeedbackPage() {
   const [isApplying, setIsApplying] = useState(false);
   const [changesHistory, setChangesHistory] = useState<ConsolidatedChangesVersion[]>([]);
   const [memberReady, setMemberReady] = useState<string[]>([]);
+  // Facilitator selection state
+  const [selectedClusterIds, setSelectedClusterIds] = useState<string[]>([]);
+  const [dismissedClusterIds, setDismissedClusterIds] = useState<string[]>([]);
+  const [activeTypeFilters, setActiveTypeFilters] = useState<SuggestionType[]>(["text_edit", "merge", "comment"]);
+  const [oneByOneQueue, setOneByOneQueue] = useState<string[]>([]);
 
   // Derived state
   const phase: FeedbackPhase = round?.phase || "collecting";
@@ -102,7 +107,10 @@ export default function FeedbackPage() {
       }
 
       setRound(targetRound);
-      setClusters((targetRound.source_clusters || []) as ClusterData[]);
+      const loadedClusters = (targetRound.source_clusters || []) as ClusterData[];
+      setClusters(loadedClusters);
+      // Auto-select all clusters on first load
+      setSelectedClusterIds(prev => prev.length === 0 ? loadedClusters.map(c => c.id) : prev);
       setChangesHistory((targetRound.consolidated_changes_history || []) as ConsolidatedChangesVersion[]);
       setMemberReady((targetRound.member_ready || []) as string[]);
 
@@ -198,10 +206,16 @@ export default function FeedbackPage() {
       await feedbackService.updateRoundPhase(round.id, "consolidating");
       setRound(prev => prev ? { ...prev, phase: "consolidating" } : null);
 
-      // Filter suggestions by selected types
-      const filteredSuggestions = selectedTypes
-        ? suggestions.filter(s => selectedTypes.includes(s.suggestion_type as feedbackService.SuggestionType))
-        : suggestions;
+      // Filter suggestions by selected types AND selected clusters
+      const filteredSuggestions = suggestions.filter(s => {
+        const matchesType = selectedTypes
+          ? selectedTypes.includes(s.suggestion_type as feedbackService.SuggestionType)
+          : true;
+        const matchesCluster = selectedClusterIds.length > 0
+          ? selectedClusterIds.includes(s.cluster_id) && !dismissedClusterIds.includes(s.cluster_id)
+          : true;
+        return matchesType && matchesCluster;
+      });
 
       // Call AI consolidation API
       const response = await fetch("/api/consolidate-feedback", {
@@ -643,6 +657,53 @@ export default function FeedbackPage() {
     }
   };
 
+  // Facilitator cluster selection handlers
+  const handleToggleCluster = (clusterId: string) => {
+    setSelectedClusterIds(prev =>
+      prev.includes(clusterId) ? prev.filter(id => id !== clusterId) : [...prev, clusterId]
+    );
+  };
+  const handleSelectAllClusters = () => {
+    const visibleIds = clusters.filter(c => !dismissedClusterIds.includes(c.id)).map(c => c.id);
+    setSelectedClusterIds(visibleIds);
+  };
+  const handleDeselectAllClusters = () => setSelectedClusterIds([]);
+  const handleDismissCluster = (clusterId: string) => {
+    setDismissedClusterIds(prev => [...prev, clusterId]);
+    setSelectedClusterIds(prev => prev.filter(id => id !== clusterId));
+  };
+  const handleRestoreCluster = (clusterId: string) => {
+    setDismissedClusterIds(prev => prev.filter(id => id !== clusterId));
+  };
+  const handleToggleTypeFilter = (type: SuggestionType) => {
+    setActiveTypeFilters(prev =>
+      prev.includes(type) ? prev.filter(t => t !== type) : [...prev, type]
+    );
+  };
+
+  // Count selected suggestions matching active filters
+  const selectedFilteredSuggestionCount = suggestions.filter(s => {
+    return selectedClusterIds.includes(s.cluster_id)
+      && activeTypeFilters.includes(s.suggestion_type as SuggestionType)
+      && !dismissedClusterIds.includes(s.cluster_id);
+  }).length;
+
+  // Handle consolidation with cluster selection
+  const handleConsolidateSelected = (mode: "all" | "one_by_one") => {
+    if (mode === "all") {
+      // Filter suggestions to only selected clusters + active types, then consolidate
+      handleConsolidate(activeTypeFilters);
+    } else {
+      // One by one: queue clusters, start with the first one
+      const clusterQueue = selectedClusterIds.filter(id => !dismissedClusterIds.includes(id));
+      if (clusterQueue.length === 0) return;
+      setOneByOneQueue(clusterQueue.slice(1)); // remaining after first
+      // For one-by-one: temporarily limit selection to first cluster only
+      setSelectedClusterIds([clusterQueue[0]]);
+      handleConsolidate(activeTypeFilters);
+    }
+  };
+
   // Show member selector if no member chosen
   if (!currentMember) {
     return <MemberSelector onSelect={handleSelectMember} sessionName={sessionName} />;
@@ -763,6 +824,10 @@ export default function FeedbackPage() {
           isApplying={isApplying}
           versions={changesHistory}
           onRestoreVersion={handleRestoreVersion}
+          selectedClusterCount={selectedClusterIds.filter(id => !dismissedClusterIds.includes(id)).length}
+          selectedSuggestionCount={selectedFilteredSuggestionCount}
+          activeTypeFilters={activeTypeFilters}
+          onConsolidateSelected={handleConsolidateSelected}
         />
 
         {/* Phase: Collecting */}
@@ -776,6 +841,16 @@ export default function FeedbackPage() {
                 phase={phase}
                 facilitatorName={round?.facilitator_name}
                 memberReady={memberReady}
+                isFacilitator={isFacilitator}
+                selectedClusterIds={selectedClusterIds}
+                onToggleCluster={handleToggleCluster}
+                onSelectAll={handleSelectAllClusters}
+                onDeselectAll={handleDeselectAllClusters}
+                dismissedClusterIds={dismissedClusterIds}
+                onDismissCluster={handleDismissCluster}
+                onRestoreCluster={handleRestoreCluster}
+                activeTypeFilters={activeTypeFilters}
+                onToggleTypeFilter={handleToggleTypeFilter}
               />
             ) : (
               <div className="space-y-4">
@@ -899,6 +974,27 @@ export default function FeedbackPage() {
             </p>
             {isFacilitator && (
               <div className="space-y-3">
+                {oneByOneQueue.length > 0 && (
+                  <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl text-center">
+                    <p className="text-sm font-medium text-blue-800 mb-3">
+                      Nog {oneByOneQueue.length} doel{oneByOneQueue.length !== 1 ? "en" : ""} in de wachtrij voor &eacute;&eacute;n-voor-&eacute;&eacute;n verwerking.
+                    </p>
+                    <button
+                      onClick={() => {
+                        const nextClusterId = oneByOneQueue[0];
+                        setOneByOneQueue(prev => prev.slice(1));
+                        setSelectedClusterIds([nextClusterId]);
+                        handleStartNewRound();
+                      }}
+                      className="px-6 py-2.5 bg-cito-blue text-white rounded-lg hover:bg-blue-800 flex items-center gap-2 mx-auto"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7l5 5m0 0l-5 5m5-5H6" />
+                      </svg>
+                      Volgende doel consolideren
+                    </button>
+                  </div>
+                )}
                 <p className="text-sm text-gray-500">
                   Het MT kan nu de doorgevoerde wijzigingen controleren en eventueel nieuwe feedback geven.
                 </p>
