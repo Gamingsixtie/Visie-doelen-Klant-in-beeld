@@ -53,6 +53,8 @@ export default function FeedbackPage() {
   const [dismissedClusterIds, setDismissedClusterIds] = useState<string[]>([]);
   const [activeTypeFilters, setActiveTypeFilters] = useState<SuggestionType[]>(["text_edit", "merge", "comment"]);
   const [oneByOneQueue, setOneByOneQueue] = useState<string[]>([]);
+  const [selectedSuggestionIds, setSelectedSuggestionIds] = useState<string[]>([]);
+  const [suggestionInstructions, setSuggestionInstructions] = useState<Record<string, string>>({});
 
   // Derived state
   const phase: FeedbackPhase = round?.phase || "collecting";
@@ -117,6 +119,8 @@ export default function FeedbackPage() {
       const fullData = await feedbackService.getFullRoundData(targetRound.id);
       if (fullData) {
         setSuggestions(fullData.suggestions);
+        // Auto-select all suggestions on first load
+        setSelectedSuggestionIds(prev => prev.length === 0 ? fullData.suggestions.map(s => s.id) : prev);
         setVotes(fullData.votes);
         setChangeVotes(fullData.changeVotes);
       }
@@ -214,18 +218,12 @@ export default function FeedbackPage() {
       await feedbackService.updateRoundPhase(round.id, "consolidating");
       setRound(prev => prev ? { ...prev, phase: "consolidating" } : null);
 
-      // Filter suggestions by selected types AND selected clusters
-      const filteredSuggestions = suggestions.filter(s => {
-        const matchesType = selectedTypes
-          ? selectedTypes.includes(s.suggestion_type as feedbackService.SuggestionType)
-          : true;
-        const matchesCluster = selectedClusterIds.length > 0
-          ? selectedClusterIds.includes(s.cluster_id) && !dismissedClusterIds.includes(s.cluster_id)
-          : true;
-        return matchesType && matchesCluster;
-      });
+      // Filter suggestions by selected IDs (which already respect type filters and cluster selection)
+      const filteredSuggestions = suggestions.filter(s =>
+        selectedSuggestionIds.includes(s.id) && !dismissedClusterIds.includes(s.cluster_id)
+      );
 
-      // Call AI consolidation API
+      // Call AI consolidation API - include AI instructions for comments
       const response = await fetch("/api/consolidate-feedback", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -241,7 +239,9 @@ export default function FeedbackPage() {
             member_name: s.member_name,
             cluster_id: s.cluster_id,
             suggestion_type: s.suggestion_type,
-            content: s.content
+            content: s.content,
+            // Include facilitator instruction for comments
+            ...(suggestionInstructions[s.id] ? { facilitator_instruction: suggestionInstructions[s.id] } : {})
           })),
           stepType
         })
@@ -689,11 +689,29 @@ export default function FeedbackPage() {
     );
   };
 
-  // Count selected suggestions matching active filters
-  const selectedFilteredSuggestionCount = suggestions.filter(s => {
-    return selectedClusterIds.includes(s.cluster_id)
-      && activeTypeFilters.includes(s.suggestion_type as SuggestionType)
-      && !dismissedClusterIds.includes(s.cluster_id);
+  // Per-suggestion selection
+  const handleToggleSuggestion = (suggestionId: string) => {
+    setSelectedSuggestionIds(prev =>
+      prev.includes(suggestionId) ? prev.filter(id => id !== suggestionId) : [...prev, suggestionId]
+    );
+  };
+  const handleSelectAllSuggestions = () => {
+    const matchingIds = suggestions
+      .filter(s => activeTypeFilters.includes(s.suggestion_type as SuggestionType) && !dismissedClusterIds.includes(s.cluster_id))
+      .map(s => s.id);
+    setSelectedSuggestionIds(matchingIds);
+  };
+  const handleDeselectAllSuggestions = () => setSelectedSuggestionIds([]);
+
+  // AI instruction per suggestion
+  const handleUpdateInstruction = (suggestionId: string, instruction: string) => {
+    setSuggestionInstructions(prev => ({ ...prev, [suggestionId]: instruction }));
+  };
+
+  // Count selected suggestions
+  const selectedFilteredSuggestionCount = selectedSuggestionIds.filter(id => {
+    const s = suggestions.find(sg => sg.id === id);
+    return s && !dismissedClusterIds.includes(s.cluster_id);
   }).length;
 
   // Handle consolidation with cluster selection
@@ -834,6 +852,7 @@ export default function FeedbackPage() {
           onRestoreVersion={handleRestoreVersion}
           selectedClusterCount={selectedClusterIds.filter(id => !dismissedClusterIds.includes(id)).length}
           selectedSuggestionCount={selectedFilteredSuggestionCount}
+          totalSuggestionCount={suggestions.length}
           activeTypeFilters={activeTypeFilters}
           onConsolidateSelected={handleConsolidateSelected}
         />
@@ -861,6 +880,12 @@ export default function FeedbackPage() {
                 onToggleTypeFilter={handleToggleTypeFilter}
                 onEditSuggestion={isFacilitator ? handleEditSuggestion : undefined}
                 onDeleteSuggestion={isFacilitator ? handleDeleteSuggestion : undefined}
+                selectedSuggestionIds={selectedSuggestionIds}
+                onToggleSuggestion={handleToggleSuggestion}
+                onSelectAllSuggestions={handleSelectAllSuggestions}
+                onDeselectAllSuggestions={handleDeselectAllSuggestions}
+                suggestionInstructions={suggestionInstructions}
+                onUpdateInstruction={handleUpdateInstruction}
               />
             ) : (
               <div className="space-y-4">

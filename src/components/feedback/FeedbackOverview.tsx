@@ -33,6 +33,14 @@ interface FeedbackOverviewProps {
   // Suggestion edit/delete for facilitator
   onEditSuggestion?: (suggestionId: string, content: Record<string, unknown>) => void;
   onDeleteSuggestion?: (suggestionId: string) => void;
+  // Per-suggestion selection
+  selectedSuggestionIds?: string[];
+  onToggleSuggestion?: (suggestionId: string) => void;
+  onSelectAllSuggestions?: () => void;
+  onDeselectAllSuggestions?: () => void;
+  // AI instructions per suggestion (for comments)
+  suggestionInstructions?: Record<string, string>;
+  onUpdateInstruction?: (suggestionId: string, instruction: string) => void;
 }
 
 const TYPE_CONFIG: { type: SuggestionType; label: string; icon: string; color: string; bgColor: string; badgeClass: string }[] = [
@@ -65,6 +73,12 @@ export function FeedbackOverview({
   onToggleTypeFilter,
   onEditSuggestion,
   onDeleteSuggestion,
+  selectedSuggestionIds = [],
+  onToggleSuggestion,
+  onSelectAllSuggestions,
+  onDeselectAllSuggestions,
+  suggestionInstructions = {},
+  onUpdateInstruction,
 }: FeedbackOverviewProps) {
   const [showDismissed, setShowDismissed] = useState(false);
   const [expandedClusters, setExpandedClusters] = useState<Set<string>>(new Set());
@@ -72,8 +86,6 @@ export function FeedbackOverview({
   const [editContent, setEditContent] = useState<Record<string, unknown>>({});
 
   const effectiveIsRoundClosed = phase ? phase === "approved" : !!isRoundClosed;
-
-  // Participation stats
   const membersWithFeedback = new Set(suggestions.map(s => s.member_name));
   const totalMembers = MT_MEMBERS.length;
 
@@ -104,12 +116,14 @@ export function FeedbackOverview({
 
     const isDismissed = dismissedClusterIds.includes(cluster.id);
     const isSelected = selectedClusterIds.includes(cluster.id);
+    const selectedInCluster = filteredSuggestions.filter(s => selectedSuggestionIds.includes(s.id)).length;
 
     return {
       cluster,
       totalSuggestions: clusterSuggestions.length,
       filteredSuggestions,
       filteredCount: filteredSuggestions.length,
+      selectedInCluster,
       commentCount,
       editCount,
       mergeCount,
@@ -124,29 +138,16 @@ export function FeedbackOverview({
   const visibleStats = clusterStats.filter(s => !s.isDismissed);
   const dismissedStats = clusterStats.filter(s => s.isDismissed);
   const selectedCount = visibleStats.filter(s => s.isSelected).length;
+  const totalSelectedSuggestions = selectedSuggestionIds.length;
 
-  const selectedFilteredSuggestionCount = suggestions.filter(s => {
-    const isInSelectedCluster = selectedClusterIds.includes(s.cluster_id);
-    const matchesTypeFilter = activeTypeFilters.includes(s.suggestion_type as SuggestionType);
-    const isNotDismissed = !dismissedClusterIds.includes(s.cluster_id);
-    return isInSelectedCluster && matchesTypeFilter && isNotDismissed;
-  }).length;
-
-  // Start editing a suggestion
+  // Start/save/cancel editing
   const startEdit = (suggestion: FeedbackSuggestion) => {
     setEditingSuggestionId(suggestion.id);
     setEditContent({ ...(suggestion.content as Record<string, unknown>) });
   };
-
-  const cancelEdit = () => {
-    setEditingSuggestionId(null);
-    setEditContent({});
-  };
-
+  const cancelEdit = () => { setEditingSuggestionId(null); setEditContent({}); };
   const saveEdit = (suggestionId: string) => {
-    if (onEditSuggestion) {
-      onEditSuggestion(suggestionId, editContent);
-    }
+    if (onEditSuggestion) onEditSuggestion(suggestionId, editContent);
     setEditingSuggestionId(null);
     setEditContent({});
   };
@@ -178,9 +179,7 @@ export function FeedbackOverview({
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-semibold text-gray-800">Deelname</h3>
           {memberReady.length > 0 && (
-            <span className="text-sm text-green-700 font-medium">
-              {memberReady.length}/{totalMembers} klaar
-            </span>
+            <span className="text-sm text-green-700 font-medium">{memberReady.length}/{totalMembers} klaar</span>
           )}
         </div>
         <div className="flex flex-wrap gap-2">
@@ -188,28 +187,17 @@ export function FeedbackOverview({
             const hasFeedback = membersWithFeedback.has(name);
             const isReady = memberReady.includes(name);
             return (
-              <div
-                key={name}
-                className={`px-3 py-1.5 rounded-full text-sm flex items-center gap-1.5 ${
-                  isReady
-                    ? "bg-green-100 text-green-700 border-2 border-green-400"
-                    : hasFeedback
-                      ? "bg-green-50 text-green-700 border border-green-200"
-                      : "bg-gray-100 text-gray-500 border border-gray-200"
-                }`}
-              >
+              <div key={name} className={`px-3 py-1.5 rounded-full text-sm flex items-center gap-1.5 ${
+                isReady ? "bg-green-100 text-green-700 border-2 border-green-400"
+                  : hasFeedback ? "bg-green-50 text-green-700 border border-green-200"
+                    : "bg-gray-100 text-gray-500 border border-gray-200"
+              }`}>
                 {isReady ? (
-                  <svg className="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
-                  </svg>
+                  <svg className="w-4 h-4 text-green-600" fill="currentColor" viewBox="0 0 24 24"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/></svg>
                 ) : hasFeedback ? (
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                  </svg>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg>
                 ) : (
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                  </svg>
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
                 )}
                 {name}
                 {isReady && <span className="text-xs font-medium">klaar</span>}
@@ -232,20 +220,14 @@ export function FeedbackOverview({
                   key={type}
                   onClick={() => onToggleTypeFilter(type)}
                   className={`flex items-center gap-2 px-3 py-2 rounded-lg border text-sm font-medium transition-all ${
-                    isActive
-                      ? `${bgColor} ${color} ring-2 ring-offset-1 ring-current`
-                      : "bg-gray-50 border-gray-200 text-gray-400"
+                    isActive ? `${bgColor} ${color} ring-2 ring-offset-1 ring-current` : "bg-gray-50 border-gray-200 text-gray-400"
                   }`}
                 >
                   <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d={icon} />
                   </svg>
                   {label}
-                  <span className={`px-1.5 py-0.5 text-xs rounded-full ${
-                    isActive ? "bg-white/60" : "bg-gray-100"
-                  }`}>
-                    {count}
-                  </span>
+                  <span className={`px-1.5 py-0.5 text-xs rounded-full ${isActive ? "bg-white/60" : "bg-gray-100"}`}>{count}</span>
                 </button>
               );
             })}
@@ -260,44 +242,44 @@ export function FeedbackOverview({
       <div className="card p-4">
         <div className="flex items-center justify-between mb-3">
           <h3 className="font-semibold text-gray-800">Doelen overzicht</h3>
-          {isFacilitator && phase === "collecting" && onSelectAll && onDeselectAll && (
-            <div className="flex items-center gap-2">
-              <span className="text-sm text-gray-500">
-                {selectedCount} van {visibleStats.length} geselecteerd
-              </span>
-              <button onClick={onSelectAll} className="text-xs text-cito-blue hover:underline">Alles selecteren</button>
-              <span className="text-gray-300">|</span>
-              <button onClick={onDeselectAll} className="text-xs text-gray-500 hover:underline">Niets selecteren</button>
-            </div>
-          )}
+          <div className="flex items-center gap-2">
+            {isFacilitator && phase === "collecting" && onSelectAll && onDeselectAll && (
+              <>
+                <span className="text-sm text-gray-500">{selectedCount}/{visibleStats.length} doelen</span>
+                <button onClick={onSelectAll} className="text-xs text-cito-blue hover:underline">Alle doelen</button>
+                <span className="text-gray-300">|</span>
+              </>
+            )}
+            {isFacilitator && phase === "collecting" && onSelectAllSuggestions && onDeselectAllSuggestions && (
+              <>
+                <span className="text-sm text-gray-500">{totalSelectedSuggestions} suggesties</span>
+                <button onClick={onSelectAllSuggestions} className="text-xs text-cito-blue hover:underline">Alle suggesties</button>
+                <button onClick={onDeselectAllSuggestions} className="text-xs text-gray-500 hover:underline ml-1">Geen</button>
+              </>
+            )}
+          </div>
         </div>
 
         <div className="space-y-3">
-          {visibleStats.map(({ cluster, totalSuggestions, filteredSuggestions, filteredCount, commentCount, editCount, mergeCount, accepts, rejects, contributors, isSelected }) => {
+          {visibleStats.map(({ cluster, totalSuggestions, filteredSuggestions, filteredCount, selectedInCluster, commentCount, editCount, mergeCount, contributors, isSelected }) => {
             const isSelectable = isFacilitator && phase === "collecting" && onToggleCluster;
             const isExpanded = expandedClusters.has(cluster.id);
-            const hasMatchingSuggestions = filteredCount > 0;
 
             return (
               <div
                 key={cluster.id}
                 className={`border rounded-lg transition-all overflow-hidden ${
                   isSelectable
-                    ? isSelected
-                      ? "border-cito-blue bg-blue-50/30 ring-1 ring-cito-blue/30"
-                      : "border-gray-200"
+                    ? isSelected ? "border-cito-blue bg-blue-50/30 ring-1 ring-cito-blue/30" : "border-gray-200"
                     : "border-gray-200"
                 }`}
               >
-                {/* Cluster header row */}
+                {/* Cluster header */}
                 <div
-                  className={`p-3 flex items-start justify-between ${
-                    isSelectable ? "cursor-pointer hover:bg-gray-50/50" : ""
-                  } ${isExpanded ? "border-b border-gray-100" : ""}`}
+                  className={`p-3 flex items-start justify-between ${isSelectable ? "cursor-pointer hover:bg-gray-50/50" : ""} ${isExpanded ? "border-b border-gray-100" : ""}`}
                   onClick={() => isSelectable && onToggleCluster(cluster.id)}
                 >
                   <div className="flex items-start gap-3 flex-1">
-                    {/* Checkbox for facilitator */}
                     {isSelectable && (
                       <div className="pt-0.5">
                         <div className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
@@ -311,7 +293,6 @@ export function FeedbackOverview({
                         </div>
                       </div>
                     )}
-
                     <div className="flex-1 min-w-0">
                       <h4 className="font-medium text-gray-800">{cluster.name}</h4>
                       <p className="text-sm text-gray-500 mt-0.5 line-clamp-1">{cluster.description}</p>
@@ -319,32 +300,22 @@ export function FeedbackOverview({
                   </div>
 
                   <div className="flex items-center gap-2 ml-4">
-                    {/* Expand/collapse button */}
                     {totalSuggestions > 0 && (
                       <button
                         onClick={(e) => { e.stopPropagation(); toggleExpanded(cluster.id); }}
                         className={`px-2 py-0.5 text-xs rounded-full font-medium flex items-center gap-1 transition-colors ${
-                          hasMatchingSuggestions
-                            ? "bg-cito-light-blue text-cito-blue hover:bg-blue-100"
-                            : "bg-gray-100 text-gray-500 hover:bg-gray-200"
+                          selectedInCluster > 0 ? "bg-cito-light-blue text-cito-blue hover:bg-blue-100" : "bg-gray-100 text-gray-500 hover:bg-gray-200"
                         }`}
                       >
-                        {isFacilitator && activeTypeFilters.length < 3
-                          ? `${filteredCount}/${totalSuggestions}`
-                          : totalSuggestions
-                        } suggestie{(isFacilitator && activeTypeFilters.length < 3 ? filteredCount : totalSuggestions) !== 1 ? "s" : ""}
+                        {isFacilitator ? `${selectedInCluster}/${filteredCount}` : filteredCount} suggestie{filteredCount !== 1 ? "s" : ""}
                         <svg className={`w-3.5 h-3.5 transition-transform ${isExpanded ? "rotate-180" : ""}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
                         </svg>
                       </button>
                     )}
                     {totalSuggestions === 0 && (
-                      <span className="px-2 py-0.5 bg-gray-100 text-gray-500 text-xs rounded-full">
-                        Geen feedback
-                      </span>
+                      <span className="px-2 py-0.5 bg-gray-100 text-gray-500 text-xs rounded-full">Geen feedback</span>
                     )}
-
-                    {/* Dismiss button */}
                     {isFacilitator && phase === "collecting" && onDismissCluster && (
                       <button
                         onClick={(e) => { e.stopPropagation(); onDismissCluster(cluster.id); }}
@@ -362,54 +333,61 @@ export function FeedbackOverview({
                 {/* Type breakdown (collapsed) */}
                 {!isExpanded && totalSuggestions > 0 && (
                   <div className={`px-3 pb-2 flex flex-wrap gap-3 text-xs text-gray-500 ${isSelectable ? "ml-8" : ""}`}>
-                    {commentCount > 0 && (
-                      <span className={activeTypeFilters.includes("comment") ? "text-amber-600 font-medium" : "text-gray-400"}>
-                        {commentCount} opmerking{commentCount !== 1 ? "en" : ""}
-                      </span>
-                    )}
-                    {editCount > 0 && (
-                      <span className={activeTypeFilters.includes("text_edit") ? "text-blue-600 font-medium" : "text-gray-400"}>
-                        {editCount} tekstwijziging{editCount !== 1 ? "en" : ""}
-                      </span>
-                    )}
-                    {mergeCount > 0 && (
-                      <span className={activeTypeFilters.includes("merge") ? "text-purple-600 font-medium" : "text-gray-400"}>
-                        {mergeCount} samenvoeg-suggestie{mergeCount !== 1 ? "s" : ""}
-                      </span>
-                    )}
+                    {commentCount > 0 && <span className={activeTypeFilters.includes("comment") ? "text-amber-600 font-medium" : "text-gray-400"}>{commentCount} opmerking{commentCount !== 1 ? "en" : ""}</span>}
+                    {editCount > 0 && <span className={activeTypeFilters.includes("text_edit") ? "text-blue-600 font-medium" : "text-gray-400"}>{editCount} tekstwijziging{editCount !== 1 ? "en" : ""}</span>}
+                    {mergeCount > 0 && <span className={activeTypeFilters.includes("merge") ? "text-purple-600 font-medium" : "text-gray-400"}>{mergeCount} samenvoeg-suggestie{mergeCount !== 1 ? "s" : ""}</span>}
                     <span className="text-gray-400">|</span>
                     <span>{contributors} bijdrager{contributors !== 1 ? "s" : ""}</span>
-                    {(accepts > 0 || rejects > 0) && (
-                      <>
-                        <span className="text-gray-400">|</span>
-                        {accepts > 0 && <span className="text-green-600">{accepts}x akkoord</span>}
-                        {rejects > 0 && <span className="text-red-600">{rejects}x afwijzen</span>}
-                      </>
-                    )}
                   </div>
                 )}
 
-                {/* Expanded: show individual suggestions */}
+                {/* Expanded: individual suggestions with selection */}
                 {isExpanded && filteredSuggestions.length > 0 && (
                   <div className="divide-y divide-gray-100">
                     {filteredSuggestions.map(suggestion => {
                       const content = suggestion.content as Record<string, unknown>;
                       const typeConf = getTypeConfig(suggestion.suggestion_type);
                       const isEditing = editingSuggestionId === suggestion.id;
+                      const isSuggestionSelected = selectedSuggestionIds.includes(suggestion.id);
+                      const isComment = suggestion.suggestion_type === "comment";
+                      const instruction = suggestionInstructions[suggestion.id] || "";
 
                       return (
-                        <div key={suggestion.id} className="px-4 py-3 hover:bg-gray-50/50">
-                          <div className="flex items-start justify-between gap-2">
+                        <div
+                          key={suggestion.id}
+                          className={`px-4 py-3 transition-colors ${
+                            isSuggestionSelected ? "bg-blue-50/40" : "hover:bg-gray-50/50"
+                          }`}
+                        >
+                          <div className="flex items-start gap-3">
+                            {/* Per-suggestion checkbox */}
+                            {isFacilitator && phase === "collecting" && onToggleSuggestion && (
+                              <div className="pt-0.5 flex-shrink-0">
+                                <button
+                                  onClick={() => onToggleSuggestion(suggestion.id)}
+                                  className={`w-5 h-5 rounded border-2 flex items-center justify-center transition-colors ${
+                                    isSuggestionSelected ? "bg-cito-blue border-cito-blue" : "bg-white border-gray-300 hover:border-gray-400"
+                                  }`}
+                                >
+                                  {isSuggestionSelected && (
+                                    <svg className="w-3.5 h-3.5 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
+                                    </svg>
+                                  )}
+                                </button>
+                              </div>
+                            )}
+
                             <div className="flex-1 min-w-0">
-                              {/* Header: member name + type badge */}
+                              {/* Header */}
                               <div className="flex items-center gap-2 mb-1.5">
                                 <span className="font-medium text-sm text-gray-700">{suggestion.member_name}</span>
                                 <span className={`px-2 py-0.5 text-xs rounded-full ${typeConf.badgeClass}`}>
-                                  {typeConf.label.replace(/en$/, '').replace(/s$/, '')}
+                                  {typeConf.type === "text_edit" ? "Tekstwijziging" : typeConf.type === "merge" ? "Samenvoegen" : "Opmerking"}
                                 </span>
                               </div>
 
-                              {/* Suggestion content - view or edit mode */}
+                              {/* Content: view or edit */}
                               {isEditing ? (
                                 <SuggestionEditForm
                                   type={suggestion.suggestion_type as SuggestionType}
@@ -424,9 +402,29 @@ export function FeedbackOverview({
                                   content={content}
                                 />
                               )}
+
+                              {/* AI instruction field for comments */}
+                              {isComment && isSuggestionSelected && isFacilitator && phase === "collecting" && onUpdateInstruction && !isEditing && (
+                                <div className="mt-2 pl-0">
+                                  <div className="flex items-center gap-1.5 mb-1">
+                                    <svg className="w-3.5 h-3.5 text-cito-blue" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" />
+                                    </svg>
+                                    <span className="text-xs font-medium text-cito-blue">Hoe moet de AI deze opmerking verwerken?</span>
+                                  </div>
+                                  <input
+                                    type="text"
+                                    value={instruction}
+                                    onChange={(e) => onUpdateInstruction(suggestion.id, e.target.value)}
+                                    onClick={(e) => e.stopPropagation()}
+                                    placeholder="Bijv. &quot;Voeg toe als nuancering bij de beschrijving&quot; of &quot;Verwerk in de doelformulering&quot;"
+                                    className="w-full px-3 py-1.5 text-sm border border-cito-blue/20 rounded-lg bg-white focus:ring-2 focus:ring-cito-blue/30 focus:outline-none focus:border-cito-blue/40 placeholder:text-gray-400"
+                                  />
+                                </div>
+                              )}
                             </div>
 
-                            {/* Action buttons for facilitator */}
+                            {/* Action buttons */}
                             {isFacilitator && phase === "collecting" && !isEditing && (
                               <div className="flex items-center gap-1 flex-shrink-0">
                                 {onEditSuggestion && (
@@ -482,28 +480,16 @@ export function FeedbackOverview({
               </svg>
               {dismissedStats.length} verborgen doel{dismissedStats.length !== 1 ? "en" : ""}
             </button>
-
             {showDismissed && (
               <div className="mt-2 space-y-2">
                 {dismissedStats.map(({ cluster, totalSuggestions }) => (
                   <div key={cluster.id} className="p-2 border border-dashed border-gray-200 rounded-lg bg-gray-50/50 flex items-center justify-between">
                     <div className="flex-1 min-w-0">
                       <span className="text-sm text-gray-400">{cluster.name}</span>
-                      {totalSuggestions > 0 && (
-                        <span className="ml-2 text-xs text-gray-300">({totalSuggestions} suggestie{totalSuggestions !== 1 ? "s" : ""})</span>
-                      )}
+                      {totalSuggestions > 0 && <span className="ml-2 text-xs text-gray-300">({totalSuggestions})</span>}
                     </div>
                     {onRestoreCluster && (
-                      <button
-                        onClick={() => onRestoreCluster(cluster.id)}
-                        className="text-xs text-cito-blue hover:underline flex items-center gap-1"
-                      >
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
-                        </svg>
-                        Terugzetten
-                      </button>
+                      <button onClick={() => onRestoreCluster(cluster.id)} className="text-xs text-cito-blue hover:underline">Terugzetten</button>
                     )}
                   </div>
                 ))}
@@ -513,8 +499,8 @@ export function FeedbackOverview({
         )}
       </div>
 
-      {/* Selection summary for facilitator */}
-      {isFacilitator && phase === "collecting" && selectedCount > 0 && (
+      {/* Selection summary */}
+      {isFacilitator && phase === "collecting" && totalSelectedSuggestions > 0 && (
         <div className="card p-4 bg-cito-light-blue/30 border-cito-blue/20">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full bg-cito-blue/10 flex items-center justify-center">
@@ -523,12 +509,8 @@ export function FeedbackOverview({
               </svg>
             </div>
             <div>
-              <p className="font-medium text-gray-800">
-                {selectedCount} doel{selectedCount !== 1 ? "en" : ""} geselecteerd
-              </p>
-              <p className="text-sm text-gray-500">
-                {selectedFilteredSuggestionCount} suggestie{selectedFilteredSuggestionCount !== 1 ? "s" : ""} van de geselecteerde types
-              </p>
+              <p className="font-medium text-gray-800">{totalSelectedSuggestions} suggestie{totalSelectedSuggestions !== 1 ? "s" : ""} geselecteerd</p>
+              <p className="text-sm text-gray-500">uit {selectedCount} doel{selectedCount !== 1 ? "en" : ""}</p>
             </div>
           </div>
         </div>
@@ -553,125 +535,71 @@ export function FeedbackOverview({
   );
 }
 
-// Display suggestion content (read-only)
+// Read-only suggestion content
 function SuggestionContentDisplay({ type, content }: { type: SuggestionType; content: Record<string, unknown> }) {
   switch (type) {
     case "comment":
       return <p className="text-sm text-gray-700">{content.text as string}</p>;
-
     case "text_edit":
       return (
         <div className="text-sm space-y-1">
           {content.suggested_name !== content.original_name && (
-            <p>
-              <span className="text-gray-400 line-through mr-1">{content.original_name as string}</span>
-              <span className="font-medium text-blue-700">{content.suggested_name as string}</span>
-            </p>
+            <p><span className="text-gray-400 line-through mr-1">{content.original_name as string}</span><span className="font-medium text-blue-700">{content.suggested_name as string}</span></p>
           )}
           {content.suggested_description !== content.original_description && (
-            <p className="text-gray-600 italic text-xs line-clamp-2">
-              &ldquo;{(content.suggested_description as string).substring(0, 200)}&rdquo;
-            </p>
+            <p className="text-gray-600 italic text-xs line-clamp-2">&ldquo;{(content.suggested_description as string).substring(0, 200)}&rdquo;</p>
           )}
           <p className="text-gray-500 text-xs">Reden: {content.reason as string}</p>
         </div>
       );
-
     case "merge":
       return (
         <div className="text-sm">
-          <p className="text-gray-700">
-            Samenvoegen met <span className="font-medium text-purple-700">{content.merge_with_cluster_name as string}</span>
-          </p>
+          <p className="text-gray-700">Samenvoegen met <span className="font-medium text-purple-700">{content.merge_with_cluster_name as string}</span></p>
           <p className="text-gray-500 text-xs">Reden: {content.reason as string}</p>
         </div>
       );
-
     default:
       return <p className="text-sm text-gray-500">Onbekend type suggestie</p>;
   }
 }
 
-// Edit form for suggestion content (facilitator only)
-function SuggestionEditForm({
-  type,
-  content,
-  onChange,
-  onSave,
-  onCancel,
-}: {
-  type: SuggestionType;
-  content: Record<string, unknown>;
-  onChange: (content: Record<string, unknown>) => void;
-  onSave: () => void;
-  onCancel: () => void;
+// Edit form
+function SuggestionEditForm({ type, content, onChange, onSave, onCancel }: {
+  type: SuggestionType; content: Record<string, unknown>;
+  onChange: (content: Record<string, unknown>) => void; onSave: () => void; onCancel: () => void;
 }) {
-  const updateField = (field: string, value: string) => {
-    onChange({ ...content, [field]: value });
-  };
-
+  const updateField = (field: string, value: string) => onChange({ ...content, [field]: value });
   return (
     <div className="space-y-2">
       {type === "comment" && (
-        <textarea
-          value={(content.text as string) || ""}
-          onChange={(e) => updateField("text", e.target.value)}
-          className="w-full px-3 py-2 border border-cito-blue/30 rounded-lg text-sm focus:ring-2 focus:ring-cito-blue focus:outline-none bg-white"
-          rows={2}
-          autoFocus
-        />
+        <textarea value={(content.text as string) || ""} onChange={(e) => updateField("text", e.target.value)}
+          className="w-full px-3 py-2 border border-cito-blue/30 rounded-lg text-sm focus:ring-2 focus:ring-cito-blue focus:outline-none bg-white" rows={2} autoFocus />
       )}
-
       {type === "text_edit" && (
         <>
           <div>
             <label className="text-xs text-gray-500 font-medium">Voorgestelde beschrijving</label>
-            <textarea
-              value={(content.suggested_description as string) || ""}
-              onChange={(e) => updateField("suggested_description", e.target.value)}
-              className="w-full px-3 py-2 border border-cito-blue/30 rounded-lg text-sm focus:ring-2 focus:ring-cito-blue focus:outline-none bg-white"
-              rows={3}
-              autoFocus
-            />
+            <textarea value={(content.suggested_description as string) || ""} onChange={(e) => updateField("suggested_description", e.target.value)}
+              className="w-full px-3 py-2 border border-cito-blue/30 rounded-lg text-sm focus:ring-2 focus:ring-cito-blue focus:outline-none bg-white" rows={3} autoFocus />
           </div>
           <div>
             <label className="text-xs text-gray-500 font-medium">Reden</label>
-            <input
-              type="text"
-              value={(content.reason as string) || ""}
-              onChange={(e) => updateField("reason", e.target.value)}
-              className="w-full px-3 py-2 border border-cito-blue/30 rounded-lg text-sm focus:ring-2 focus:ring-cito-blue focus:outline-none bg-white"
-            />
+            <input type="text" value={(content.reason as string) || ""} onChange={(e) => updateField("reason", e.target.value)}
+              className="w-full px-3 py-2 border border-cito-blue/30 rounded-lg text-sm focus:ring-2 focus:ring-cito-blue focus:outline-none bg-white" />
           </div>
         </>
       )}
-
       {type === "merge" && (
         <div>
           <label className="text-xs text-gray-500 font-medium">Reden</label>
-          <input
-            type="text"
-            value={(content.reason as string) || ""}
-            onChange={(e) => updateField("reason", e.target.value)}
-            className="w-full px-3 py-2 border border-cito-blue/30 rounded-lg text-sm focus:ring-2 focus:ring-cito-blue focus:outline-none bg-white"
-            autoFocus
-          />
+          <input type="text" value={(content.reason as string) || ""} onChange={(e) => updateField("reason", e.target.value)}
+            className="w-full px-3 py-2 border border-cito-blue/30 rounded-lg text-sm focus:ring-2 focus:ring-cito-blue focus:outline-none bg-white" autoFocus />
         </div>
       )}
-
       <div className="flex gap-2">
-        <button
-          onClick={onSave}
-          className="px-3 py-1.5 text-xs bg-cito-blue text-white rounded-lg hover:bg-blue-800"
-        >
-          Opslaan
-        </button>
-        <button
-          onClick={onCancel}
-          className="px-3 py-1.5 text-xs bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300"
-        >
-          Annuleren
-        </button>
+        <button onClick={onSave} className="px-3 py-1.5 text-xs bg-cito-blue text-white rounded-lg hover:bg-blue-800">Opslaan</button>
+        <button onClick={onCancel} className="px-3 py-1.5 text-xs bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300">Annuleren</button>
       </div>
     </div>
   );

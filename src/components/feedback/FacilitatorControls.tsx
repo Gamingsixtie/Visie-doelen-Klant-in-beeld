@@ -23,6 +23,7 @@ interface FacilitatorControlsProps {
   // New props for enhanced selection
   selectedClusterCount?: number;
   selectedSuggestionCount?: number;
+  totalSuggestionCount?: number;
   activeTypeFilters?: SuggestionType[];
   onConsolidateSelected?: (mode: ConsolidationMode) => void;
 }
@@ -42,6 +43,7 @@ export function FacilitatorControls({
   onRestoreVersion,
   selectedClusterCount = 0,
   selectedSuggestionCount = 0,
+  totalSuggestionCount = 0,
   activeTypeFilters = ["text_edit", "merge", "comment"],
   onConsolidateSelected,
 }: FacilitatorControlsProps) {
@@ -93,7 +95,7 @@ export function FacilitatorControls({
           ) : (
             <div>
               <p className="text-sm text-gray-600 mb-3">
-                Er zijn {suggestionsCount} suggesties verzameld. Selecteer hierboven de doelen en feedbacktypes die je wilt consolideren.
+                Er zijn {suggestionsCount} suggesties verzameld. Klap de doelen open om individuele suggesties te selecteren en opmerkingen van een AI-instructie te voorzien.
               </p>
 
               {/* Selection summary */}
